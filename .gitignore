@@ -1,0 +1,40 @@
+### Dependencies
+node_modules/
+.pnpm-store/
+
+### Build outputs
+.next/
+dist/
+build/
+out/
+coverage/
+.turbo/
+.vercel/
+*.tsbuildinfo
+.eslintcache
+
+### Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+### Environment and secrets
+.env
+.env.*
+!.env.local.example
+!.env.example
+*.pem
+gsc-service-account.json
+
+### Supabase CLI state
+supabase/.temp/
+
+### OS cruft
+.DS_Store
+Thumbs.db
+
+### Project artifacts
+SnapForge_Roadmap.md
+Architecture.png

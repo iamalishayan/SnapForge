@@ -1,0 +1,11 @@
+{
+  "name": "@snapforge/db",
+  "version": "0.1.0",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

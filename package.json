@@ -1,0 +1,16 @@
+{
+  "name": "snapforge",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:admin": "pnpm --filter admin dev",
+    "dev:sites": "pnpm --filter sites dev",
+    "build": "pnpm --filter './apps/*' build",
+    "lint": "pnpm --filter './apps/*' lint"
+  },
+  "devDependencies": {
+    "dotenv": "^17.4.2",
+    "tsx": "^4.23.1",
+    "typescript": "^5.0.0"
+  }
+}
