@@ -76,6 +76,7 @@ create table translations (
     check (status in ('staging','qa_queue','qa_approved','published','flagged')),
   qa_auto_passed boolean,
   qa_auto_errors jsonb default '[]',
+  qa_auto_warnings jsonb default '[]',  -- soft warnings that don't block QA (e.g. word count ratio)
   qa_human_reviewed boolean default false,
   qa_reviewer_notes text,
   token_count integer,
@@ -159,3 +160,23 @@ alter table publish_log enable row level security;
 create policy "Public read published translations" on translations for select using (status = 'published' and deleted_at is null);
 create policy "Public read site configs" on site_configs for select using (active = true);
 create policy "Public read templates" on templates for select using (active = true and deleted_at is null);
+
+-- indexing_stats table — tracks Google Search Console performance per site per day
+create table indexing_stats (
+  id uuid primary key default gen_random_uuid(),
+  site_config_id uuid references site_configs(id) on delete cascade,
+  date date not null,
+  total_clicks integer default 0,
+  total_impressions integer default 0,
+  avg_ctr numeric(5,4) default 0,
+  avg_position numeric(6,2) default 0,
+  created_at timestamptz default now(),
+  unique(site_config_id, date)
+);
+
+-- ============================================================
+-- MIGRATION: Run these in Supabase SQL Editor if DB already exists
+-- ============================================================
+-- alter table translations add column if not exists qa_auto_warnings jsonb default '[]';
+-- (run indexing_stats CREATE TABLE above if table doesn't exist yet)
+-- ============================================================

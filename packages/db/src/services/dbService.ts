@@ -43,6 +43,30 @@ export class DbService {
     return data
   }
 
+  static async getTemplateById(id: string) {
+    const { data, error } = await this.client
+      .from('templates')
+      .select('*')
+      .eq('id', id)
+      .is('deleted_at', null)
+      .single()
+
+    if (error) throw new Error(`Failed to fetch template ${id}: ${error.message}`)
+    return data
+  }
+
+  static async updateTemplate(id: string, updates: TablesUpdate<'templates'>) {
+    const { data, error } = await this.client
+      .from('templates')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw new Error(`Failed to update template ${id}: ${error.message}`)
+    return data
+  }
+
   // --- ARTICLES ---
   static async getArticles() {
     const { data, error } = await this.client
@@ -90,6 +114,18 @@ export class DbService {
     return data
   }
 
+  static async deleteArticle(id: string) {
+    const { data, error } = await this.client
+      .from('articles')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw new Error(`Failed to delete article ${id}: ${error.message}`)
+    return data
+  }
+
   // --- SITE CONFIGURATIONS ---
   static async getSiteConfigs() {
     const { data, error } = await this.client
@@ -101,7 +137,84 @@ export class DbService {
     return data
   }
 
+  static async createSiteConfig(config: TablesInsert<'site_configs'>) {
+    const { data, error } = await this.client
+      .from('site_configs')
+      .insert(config)
+      .select()
+      .single()
+
+    if (error) throw new Error(`Failed to create site config: ${error.message}`)
+    return data
+  }
+
+  static async getSiteConfigById(id: string) {
+    const { data, error } = await this.client
+      .from('site_configs')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) throw new Error(`Failed to fetch site config ${id}: ${error.message}`)
+    return data
+  }
+
+  static async updateSiteConfig(id: string, updates: TablesUpdate<'site_configs'>) {
+    const { data, error } = await this.client
+      .from('site_configs')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw new Error(`Failed to update site config ${id}: ${error.message}`)
+    return data
+  }
+
   // --- TRANSLATIONS ---
+  static async getTranslations(filters?: { status?: string; articleId?: string }) {
+    let query = this.client
+      .from('translations')
+      .select('*, articles(title), site_configs(domain, language_code)')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+
+    if (filters?.status) {
+      query = query.eq('status', filters.status)
+    }
+    if (filters?.articleId) {
+      query = query.eq('article_id', filters.articleId)
+    }
+
+    const { data, error } = await query
+    if (error) throw new Error(`Failed to fetch translations: ${error.message}`)
+    return data
+  }
+
+  static async getTranslationById(id: string) {
+    const { data, error } = await this.client
+      .from('translations')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) throw new Error(`Failed to fetch translation ${id}: ${error.message}`)
+    return data
+  }
+
+  static async getPublishedTranslation(domain: string, templateSlug: string) {
+    const { data, error } = await this.client
+      .from('translations')
+      .select('*, site_configs!inner(domain), articles!inner(templates!inner(slug))')
+      .eq('site_configs.domain', domain)
+      .eq('articles.templates.slug', templateSlug)
+      .eq('status', 'qa_approved')
+      .maybeSingle()
+
+    if (error) throw new Error(`Failed to fetch published translation: ${error.message}`)
+    return data
+  }
+
   static async upsertTranslation(translation: TablesInsert<'translations'>) {
     const { data, error } = await this.client
       .from('translations')
@@ -120,6 +233,11 @@ export class DbService {
     }
     if (reviewerNotes !== undefined) {
       updatePayload.qa_reviewer_notes = reviewerNotes
+    }
+
+    // If a human is approving or flagging the translation, mark it as human reviewed
+    if (status === 'qa_approved' || status === 'flagged') {
+      updatePayload.qa_human_reviewed = true
     }
 
     const { data, error } = await this.client
@@ -155,6 +273,50 @@ export class DbService {
       .maybeSingle()
 
     if (error) throw new Error(`Failed to fetch keywords: ${error.message}`)
+    return data
+  }
+
+  static async saveKeywords(payload: TablesInsert<'keywords'>) {
+    const { data, error } = await this.client
+      .from('keywords')
+      .upsert(payload, { onConflict: 'template_id,language_code' })
+      .select()
+      .single()
+
+    if (error) throw new Error(`Failed to save keywords: ${error.message}`)
+    return data
+  }
+
+  // --- INDEXING STATS ---
+  static async recordIndexingStats(siteConfigId: string, stats: {
+    date: string            // YYYY-MM-DD
+    total_clicks: number
+    total_impressions: number
+    avg_ctr: number
+    avg_position: number
+  }) {
+    const { data, error } = await this.client
+      .from('indexing_stats' as any)
+      .upsert(
+        { ...stats, site_config_id: siteConfigId },
+        { onConflict: 'site_config_id,date' } // Upsert so re-running the cron on the same day updates instead of errors
+      )
+      .select()
+      .single()
+
+    if (error) throw new Error(`Failed to record indexing stats: ${error.message}`)
+    return data
+  }
+
+  // --- PUBLISH LOG ---
+  static async logPublishAction(log: TablesInsert<'publish_log'>) {
+    const { data, error } = await this.client
+      .from('publish_log')
+      .insert(log)
+      .select()
+      .single()
+
+    if (error) throw new Error(`Failed to insert publish log: ${error.message}`)
     return data
   }
 }

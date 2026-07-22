@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "main": "src/index.ts",
   "dependencies": {
-    "resend": "^3.0.0",
-    "googleapis": "^140.0.0",
+    "googleapis": "^140.0.1",
+    "resend": "^3.5.0",
     "zod": "^3.0.0"
   },
   "devDependencies": {

@@ -2,9 +2,16 @@
   "name": "@snapforge/queue",
   "version": "0.1.0",
   "main": "src/index.ts",
+  "scripts": {
+    "worker:dev": "tsx --env-file=../../.env.local src/start-worker.ts",
+    "worker:start": "node --require dotenv/config dist/start-worker.js"
+  },
   "dependencies": {
     "bullmq": "^5.0.0",
-    "ioredis": "^5.0.0"
+    "ioredis": "^5.0.0",
+    "dotenv": "^16.0.0",
+    "@snapforge/db": "workspace:*",
+    "@snapforge/ai": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.0.0"

@@ -117,6 +117,47 @@ export type Database = {
           },
         ]
       }
+      indexing_stats: {
+        Row: {
+          avg_ctr: number | null
+          avg_position: number | null
+          created_at: string | null
+          date: string
+          id: string
+          site_config_id: string | null
+          total_clicks: number | null
+          total_impressions: number | null
+        }
+        Insert: {
+          avg_ctr?: number | null
+          avg_position?: number | null
+          created_at?: string | null
+          date: string
+          id?: string
+          site_config_id?: string | null
+          total_clicks?: number | null
+          total_impressions?: number | null
+        }
+        Update: {
+          avg_ctr?: number | null
+          avg_position?: number | null
+          created_at?: string | null
+          date?: string
+          id?: string
+          site_config_id?: string | null
+          total_clicks?: number | null
+          total_impressions?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "indexing_stats_site_config_id_fkey"
+            columns: ["site_config_id"]
+            isOneToOne: false
+            referencedRelation: "site_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       keywords: {
         Row: {
           country_code: string
@@ -359,6 +400,7 @@ export type Database = {
           outer_links: Json | null
           qa_auto_errors: Json | null
           qa_auto_passed: boolean | null
+          qa_auto_warnings: Json | null
           qa_human_reviewed: boolean | null
           qa_reviewer_notes: string | null
           site_config_id: string | null
@@ -385,6 +427,7 @@ export type Database = {
           outer_links?: Json | null
           qa_auto_errors?: Json | null
           qa_auto_passed?: boolean | null
+          qa_auto_warnings?: Json | null
           qa_human_reviewed?: boolean | null
           qa_reviewer_notes?: string | null
           site_config_id?: string | null
@@ -411,6 +454,7 @@ export type Database = {
           outer_links?: Json | null
           qa_auto_errors?: Json | null
           qa_auto_passed?: boolean | null
+          qa_auto_warnings?: Json | null
           qa_human_reviewed?: boolean | null
           qa_reviewer_notes?: string | null
           site_config_id?: string | null

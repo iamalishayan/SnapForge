@@ -4,9 +4,10 @@
   "main": "src/index.ts",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.0",
-    "@google/generative-ai": "^0.3.0",
-    "p-limit": "^5.0.0",
-    "cheerio": "^1.0.0"
+    "@google/generative-ai": "^0.24.1",
+    "@snapforge/db": "workspace:*",
+    "cheerio": "^1.0.0",
+    "p-limit": "^5.0.0"
   },
   "devDependencies": {
     "typescript": "^5.0.0"
