@@ -7,11 +7,15 @@
     "dev:sites": "pnpm --filter sites dev",
     "dev:worker": "pnpm --filter @snapforge/queue worker:dev",
     "build": "pnpm --filter './apps/*' build",
-    "lint": "pnpm --filter './apps/*' lint"
+    "lint": "pnpm --filter './apps/*' lint",
+    "test": "vitest run",
+    "type-check": "for dir in apps/* packages/*; do if [ -f \"$dir/tsconfig.json\" ]; then (cd \"$dir\" && npx tsc --noEmit); fi; done"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "dotenv": "^17.4.2",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.35",
     "msw": "^2.15.0",
     "tsx": "^4.23.1",
     "typescript": "^5.0.0",
