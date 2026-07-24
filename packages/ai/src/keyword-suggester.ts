@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
+import { withTimeout } from '@snapforge/shared'
 
 /**
  * Calls Gemini to suggest the top 5 localized SEO search queries for a given template and locale.
@@ -26,17 +27,21 @@ Context about the tool: "${templateContext}"
 CRITICAL INSTRUCTION: You must provide the search queries STRICTLY AND ONLY in the native language corresponding to the language code '${languageCode}'. Do NOT output English keywords unless the language code is 'en'. Provide natural, highly-searched exact phrases.
 Return only the 5 queries in a JSON array.`
 
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: SchemaType.ARRAY,
-        items: { type: SchemaType.STRING },
-        description: 'Array of top 5 localized SEO search queries'
+  const result = await withTimeout(
+    model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: SchemaType.ARRAY,
+          items: { type: SchemaType.STRING },
+          description: 'Array of top 5 localized SEO search queries'
+        }
       }
-    }
-  })
+    }),
+    20_000,
+    'Gemini keyword suggestion timeout after 20s'
+  )
 
   const responseText = result.response.text()
   if (!responseText) {

@@ -12,6 +12,8 @@ coverage/
 .vercel/
 *.tsbuildinfo
 .eslintcache
+playwright-report/
+test-results/
 
 ### Logs
 *.log

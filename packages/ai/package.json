@@ -6,6 +6,7 @@
     "@anthropic-ai/sdk": "^0.20.0",
     "@google/generative-ai": "^0.24.1",
     "@snapforge/db": "workspace:*",
+    "@snapforge/shared": "workspace:*",
     "cheerio": "^1.0.0",
     "p-limit": "^5.0.0"
   },

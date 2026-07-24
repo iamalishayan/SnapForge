@@ -1,6 +1,29 @@
 import { createAdminClient } from '../server'
 import type { Database, Tables, TablesInsert, TablesUpdate } from '../types'
+let purifyInstance: any = null
 
+export function sanitizeHtml(dirty: string): string {
+  if (!purifyInstance) {
+    // Lazy load JSDOM and DOMPurify to prevent Next.js build errors
+    // JSDOM does fs.readFileSync during initialization which breaks Next.js static generation
+    const { JSDOM } = require('jsdom')
+    const DOMPurify = require('dompurify')
+    
+    const window = new JSDOM('').window
+    purifyInstance = DOMPurify(window)
+    
+    // Optional: Add a hook to force all links to open in a new tab securely
+    purifyInstance.addHook('afterSanitizeAttributes', function(node: any) {
+      if ('target' in node) {
+        node.setAttribute('target', '_blank')
+        node.setAttribute('rel', 'noopener noreferrer')
+      }
+    })
+  }
+
+  // By NOT providing ALLOWED_TAGS, we use DOMPurify's default heavily-researched list.
+  return purifyInstance.sanitize(dirty) as string
+}
 
 // Let client be instantiated on-demand inside the service methods
 
@@ -68,13 +91,20 @@ export class DbService {
   }
 
   // --- ARTICLES ---
-  static async getArticles() {
-    const { data, error } = await this.client
+  static async getArticles(opts?: { limit?: number; cursor?: string }) {
+    const limit = Math.min(opts?.limit || 20, 100)
+    let query = this.client
       .from('articles')
       .select('*, templates(*)')
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
+      .limit(limit)
 
+    if (opts?.cursor) {
+      query = query.lt('created_at', opts.cursor)
+    }
+
+    const { data, error } = await query
     if (error) throw new Error(`Failed to fetch articles: ${error.message}`)
     return data
   }
@@ -92,6 +122,9 @@ export class DbService {
   }
 
   static async createArticle(article: TablesInsert<'articles'>) {
+    if (article.content) {
+      article.content = sanitizeHtml(article.content)
+    }
     const { data, error } = await this.client
       .from('articles')
       .insert(article)
@@ -103,6 +136,9 @@ export class DbService {
   }
 
   static async updateArticle(id: string, updates: TablesUpdate<'articles'>) {
+    if (updates.content) {
+      updates.content = sanitizeHtml(updates.content)
+    }
     const { data, error } = await this.client
       .from('articles')
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -172,18 +208,23 @@ export class DbService {
   }
 
   // --- TRANSLATIONS ---
-  static async getTranslations(filters?: { status?: string; articleId?: string }) {
+  static async getTranslations(filters?: { status?: string; articleId?: string; limit?: number; cursor?: string }) {
+    const limit = Math.min(filters?.limit || 20, 100)
     let query = this.client
       .from('translations')
       .select('*, articles(title), site_configs(domain, language_code)')
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
+      .limit(limit)
 
     if (filters?.status) {
       query = query.eq('status', filters.status)
     }
     if (filters?.articleId) {
       query = query.eq('article_id', filters.articleId)
+    }
+    if (filters?.cursor) {
+      query = query.lt('created_at', filters.cursor)
     }
 
     const { data, error } = await query
@@ -216,6 +257,21 @@ export class DbService {
   }
 
   static async upsertTranslation(translation: TablesInsert<'translations'>) {
+    // 1. Fetch existing version to increment it (preserves translation history)
+    if (translation.article_id && translation.site_config_id) {
+      const { data: existing } = await this.client
+        .from('translations')
+        .select('version')
+        .eq('article_id', translation.article_id)
+        .eq('site_config_id', translation.site_config_id)
+        .maybeSingle()
+      
+      translation.version = existing ? (existing.version || 1) + 1 : 1
+    } else {
+      translation.version = 1
+    }
+
+    // 2. Upsert the translation with the new version
     const { data, error } = await this.client
       .from('translations')
       .upsert(translation, { onConflict: 'article_id,site_config_id' })
@@ -274,6 +330,18 @@ export class DbService {
 
     if (error) throw new Error(`Failed to fetch keywords: ${error.message}`)
     return data
+  }
+
+  static async getKeywordsForTemplateBatch(templateId: string, languageCodes: string[]) {
+    if (languageCodes.length === 0) return []
+    const { data, error } = await this.client
+      .from('keywords')
+      .select('*')
+      .eq('template_id', templateId)
+      .in('language_code', languageCodes)
+
+    if (error) throw new Error(`Failed to fetch batched keywords: ${error.message}`)
+    return data || []
   }
 
   static async saveKeywords(payload: TablesInsert<'keywords'>) {

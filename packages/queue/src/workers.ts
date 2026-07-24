@@ -2,6 +2,7 @@ import { Worker } from 'bullmq'
 import { connection } from './connection'
 import { DbService } from '@snapforge/db'
 import { translateArticle, runAutoQAChecks } from '@snapforge/ai'
+import { logger, withTimeout } from '@snapforge/shared'
 import type { TranslationJobPayload, RevalidationJobPayload } from './types'
 
 /**
@@ -15,7 +16,7 @@ export const translationWorker = new Worker<TranslationJobPayload>(
   async (job) => {
     const { articleId, siteConfigId, targetLanguage, countryCode, primaryKeyword, secondaryKeywords } = job.data
 
-    console.log(`[Worker] Processing translation for article ${articleId} -> ${targetLanguage} (${countryCode})`)
+    logger.info({ jobId: job.id, articleId, targetLanguage, countryCode }, 'Processing translation')
 
     // 1. Fetch original article context (includes joined template data)
     const article = await DbService.getArticleById(articleId)
@@ -77,7 +78,7 @@ export const translationWorker = new Worker<TranslationJobPayload>(
       estimated_cost_usd: (translation.input_tokens * 0.000075) + (translation.output_tokens * 0.0003) // Gemini price estimator
     })
 
-    console.log(`[Worker] Finished translation job ${job.id}. QA Passed: ${qaResult.passed}`)
+    logger.info({ jobId: job.id, qaPassed: qaResult.passed }, 'Finished translation job')
   },
   {
     connection: connection as any,
@@ -89,33 +90,51 @@ export const translationWorker = new Worker<TranslationJobPayload>(
   }
 )
 
+function isValidPublicDomain(domain: string): boolean {
+  try {
+    const hostname = new URL(`https://${domain}`).hostname
+    const blocked = /^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/
+    return !blocked.test(hostname)
+  } catch {
+    return false
+  }
+}
+
 /**
  * Revalidation Worker
- * Hits Vercel revalidate URL per domain.
- * Concurrency: 1 (Ensures staggered requests to Vercel without overload)
+ * Hits the Next.js revalidation endpoint on the sites frontend to clear the CDN cache
+ * Concurrency: 1 (Ensures we don't bombard our own frontend)
  */
 export const revalidationWorker = new Worker<RevalidationJobPayload>(
   'revalidation-jobs',
   async (job) => {
-    const { domain, templateSlug } = job.data
+    const { templateSlug, domain } = job.data
     const revalidationSecret = process.env.REVALIDATION_SECRET
 
     if (!revalidationSecret) {
       throw new Error('REVALIDATION_SECRET environment variable is missing on execution context.')
     }
 
-    console.log(`[Worker] Triggering revalidation on: ${domain}/${templateSlug}`)
+    if (!domain.includes('localhost') && !isValidPublicDomain(domain)) {
+      throw new Error(`SSRF protection blocked request to: ${domain}`)
+    }
+
+    logger.info({ jobId: job.id, domain, templateSlug }, 'Triggering revalidation')
 
     const protocol = domain.includes('localhost') ? 'http' : 'https'
     const revalidateUrl = `${protocol}://${domain}/api/revalidate`
-    const response = await fetch(revalidateUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-revalidation-secret': revalidationSecret
-      },
-      body: JSON.stringify({ templateSlug, domain })
-    })
+    const response = await withTimeout(
+      fetch(revalidateUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-revalidation-secret': revalidationSecret
+        },
+        body: JSON.stringify({ templateSlug, domain })
+      }),
+      10_000,
+      'Revalidation webhook timeout after 10s'
+    )
 
 
     if (!response.ok) {
@@ -123,7 +142,7 @@ export const revalidationWorker = new Worker<RevalidationJobPayload>(
       throw new Error(`Revalidation request failed. HTTP Status: ${response.status}. Detail: ${responseBody}`)
     }
 
-    console.log(`Worker] Revalidated page https://${domain}/${templateSlug}`)
+    logger.info({ jobId: job.id, domain, templateSlug }, 'Revalidated page')
   },
   {
     connection: connection as any,
@@ -135,5 +154,28 @@ export const revalidationWorker = new Worker<RevalidationJobPayload>(
   }
 )
 
+import { Queue } from 'bullmq'
 
+const dlq = new Queue<any, any, string>('dead-letter-jobs', {
+  connection: connection as any
+})
 
+translationWorker.on('failed', async (job, err) => {
+  if (job && job.attemptsMade >= (job.opts.attempts || 3)) {
+    await dlq.add('failed-translation', {
+      originalPayload: job.data,
+      error: err.message
+    })
+    logger.error({ jobId: job.id, err: err.message }, 'Translation Job permanently failed')
+  }
+})
+
+revalidationWorker.on('failed', async (job, err) => {
+  if (job && job.attemptsMade >= (job.opts.attempts || 3)) {
+    await dlq.add('failed-revalidation', {
+      originalPayload: job.data,
+      error: err.message
+    })
+    logger.error({ jobId: job.id, err: err.message }, 'Revalidation Job permanently failed')
+  }
+})

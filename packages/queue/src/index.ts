@@ -25,6 +25,11 @@ export const revalidationQueue = new Queue<RevalidationJobPayload, any, string>(
   }
 })
 
+// DLQ for permanently failed jobs (after all retries)
+export const deadLetterQueue = new Queue<any, any, string>('dead-letter-jobs', {
+  connection: connection as any
+})
+
 
 
 export * from './types'

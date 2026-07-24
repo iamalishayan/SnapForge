@@ -13,46 +13,94 @@
 
 import 'dotenv/config'
 import { translationWorker, revalidationWorker } from './workers'
+import { translationQueue, revalidationQueue, deadLetterQueue } from './index'
 import { connection } from './connection'
+import { logger } from '@snapforge/shared'
+import express from 'express'
+import { createBullBoard } from '@bull-board/api'
+import { BullMQAdapter } from '@bull-board/api/bullMQAdapter'
+import { ExpressAdapter } from '@bull-board/express'
 
-const WORKER_PROCESS_NAME = 'SnapForge Worker'
+const isDev = process.env.NODE_ENV !== 'production'
 
-// ─── Startup Banner ──────────────────────────────────────────────────────────
-console.log(`
-╔════════════════════════════════════════╗
-║    ${WORKER_PROCESS_NAME} v1.0              ║
-║    Translation + Revalidation Queue    ║
-╚════════════════════════════════════════╝
-`)
+const banner = `
+=========================================
+  SNAPFORGE BACKGROUND WORKER PROCESS
+  Node Env: ${process.env.NODE_ENV || 'development'}
+=========================================
+`
 
-console.log('[Worker] Translation worker registered on queue: translation-jobs')
-console.log('[Worker] Revalidation worker registered on queue: revalidation-jobs')
-console.log('[Worker] Listening for jobs...\n')
+if (isDev) {
+  // In dev, print banner directly so it looks nice
+  console.log(banner)
+}
+
+logger.info({ queue: 'translation-jobs' }, 'Worker registered')
+logger.info({ queue: 'revalidation-jobs' }, 'Worker registered')
+logger.info('Listening for jobs...')
+
+// Setup Bull Board Express Server
+const serverAdapter = new ExpressAdapter()
+serverAdapter.setBasePath('/admin/queues')
+
+createBullBoard({
+  queues: [
+    new BullMQAdapter(translationQueue),
+    new BullMQAdapter(revalidationQueue),
+    new BullMQAdapter(deadLetterQueue)
+  ],
+  serverAdapter,
+})
+
+const app = express()
+
+// Simple basic auth using the ADMIN_API_KEY
+app.use('/admin/queues', (req, res, next) => {
+  const b64auth = (req.headers.authorization || '').split(' ')[1] || ''
+  const [login, password] = Buffer.from(b64auth, 'base64').toString().split(':')
+  const expectedKey = process.env.ADMIN_API_KEY
+
+  if (login === 'admin' && password === expectedKey) {
+    return next()
+  }
+
+  res.set('WWW-Authenticate', 'Basic realm="SnapForge Bull Board"')
+  res.status(401).send('Authentication required.')
+})
+
+app.use('/admin/queues', serverAdapter.getRouter())
+
+const boardPort = process.env.BULL_BOARD_PORT || 3005
+const boardServer = app.listen(boardPort, () => {
+  logger.info({ port: boardPort }, 'Bull Board UI running at /admin/queues')
+})
 
 // ─── Worker Event Listeners ───────────────────────────────────────────────────
 translationWorker.on('completed', (job) => {
-  console.log(`[Translation] ✅ Job ${job.id} completed successfully.`)
+  logger.info({ jobId: job.id }, 'Job completed successfully')
 })
 
 translationWorker.on('failed', (job, err) => {
-  console.error(`[Translation] ❌ Job ${job?.id} failed: ${err.message}`)
+  logger.error({ jobId: job?.id, err: err.message }, 'Job failed')
 })
 
 translationWorker.on('active', (job) => {
-  console.log(`[Translation] 🔄 Job ${job.id} started processing...`)
+  logger.info({ jobId: job.id }, 'Job started processing')
 })
 
 revalidationWorker.on('completed', (job) => {
-  console.log(`[Revalidation] ✅ Job ${job.id} completed.`)
+  logger.info({ jobId: job.id }, 'Job completed')
 })
 
 revalidationWorker.on('failed', (job, err) => {
-  console.error(`[Revalidation] ❌ Job ${job?.id} failed: ${err.message}`)
+  logger.error({ jobId: job?.id, err: err.message }, 'Job failed')
 })
 
 // ─── Graceful Shutdown ────────────────────────────────────────────────────────
-async function shutdown(signal: string) {
-  console.log(`\n[Worker] Received ${signal} — shutting down gracefully...`)
+const shutdown = async (signal: string) => {
+  logger.info({ signal }, 'Received shutdown signal, shutting down gracefully...')
+
+  await new Promise(r => boardServer.close(r))
 
   await Promise.all([
     translationWorker.close(),
@@ -60,7 +108,7 @@ async function shutdown(signal: string) {
     connection.quit()
   ])
 
-  console.log('[Worker] All workers stopped. Goodbye.')
+  logger.info('All workers stopped. Goodbye.')
   process.exit(0)
 }
 
@@ -71,8 +119,4 @@ process.on('SIGTERM', () => shutdown('SIGTERM'))
 // Log a heartbeat every 30 seconds so you know the process is alive
 setInterval(() => {
   const mem = process.memoryUsage()
-  console.log(
-    `[Worker] 💓 Heartbeat | Uptime: ${Math.floor(process.uptime())}s` +
-    ` | RSS: ${Math.round(mem.rss / 1024 / 1024)}MB`
-  )
 }, 30_000)

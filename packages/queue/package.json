@@ -7,13 +7,19 @@
     "worker:start": "node --require dotenv/config dist/start-worker.js"
   },
   "dependencies": {
-    "bullmq": "^5.0.0",
-    "ioredis": "^5.0.0",
-    "dotenv": "^16.0.0",
+    "@bull-board/api": "^8.1.2",
+    "@bull-board/express": "^8.1.2",
+    "@bull-board/ui": "^8.1.2",
+    "@snapforge/ai": "workspace:*",
     "@snapforge/db": "workspace:*",
-    "@snapforge/ai": "workspace:*"
+    "@snapforge/shared": "workspace:*",
+    "bullmq": "^5.0.0",
+    "dotenv": "^16.0.0",
+    "express": "^5.2.1",
+    "ioredis": "^5.0.0"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "typescript": "^5.0.0"
   }
 }

@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
 
 import { buildTranslationPrompt } from './prompts/translate'
+import { withTimeout } from '@snapforge/shared'
 import type { Tables } from '@snapforge/db'
 
 export interface TranslationResponse {
@@ -48,39 +49,43 @@ export async function translateArticle(
     templatePrompt
   })
 
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: SchemaType.OBJECT,
-        properties: {
-          translated_title: { type: SchemaType.STRING },
-          translated_content: { type: SchemaType.STRING },
-          translated_meta_title: { type: SchemaType.STRING },
-          translated_meta_description: { type: SchemaType.STRING },
-          translated_faq: {
-            type: SchemaType.ARRAY,
-            items: {
-              type: SchemaType.OBJECT,
-              properties: {
-                question: { type: SchemaType.STRING },
-                answer: { type: SchemaType.STRING }
-              },
-              required: ['question', 'answer']
+  const result = await withTimeout(
+    model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: SchemaType.OBJECT,
+          properties: {
+            translated_title: { type: SchemaType.STRING },
+            translated_content: { type: SchemaType.STRING },
+            translated_meta_title: { type: SchemaType.STRING },
+            translated_meta_description: { type: SchemaType.STRING },
+            translated_faq: {
+              type: SchemaType.ARRAY,
+              items: {
+                type: SchemaType.OBJECT,
+                properties: {
+                  question: { type: SchemaType.STRING },
+                  answer: { type: SchemaType.STRING }
+                },
+                required: ['question', 'answer']
+              }
             }
-          }
-        },
-        required: [
-          'translated_title',
-          'translated_content',
-          'translated_meta_title',
-          'translated_meta_description',
-          'translated_faq'
-        ]
+          },
+          required: [
+            'translated_title',
+            'translated_content',
+            'translated_meta_title',
+            'translated_meta_description',
+            'translated_faq'
+          ]
+        }
       }
-    }
-  })
+    }),
+    60_000,
+    'Gemini translation timeout after 60s'
+  )
 
 
   const responseText = result.response.text()
