@@ -8,17 +8,29 @@ on:
 
 jobs:
   ci:
-    name: Build, Lint, and Test Continuous Integration Workflow
+    name: Build, Lint, and Test
     runs-on: ubuntu-latest
     
+    # Provide a real Redis instance to prevent ECONNREFUSED during Next.js static generation
+    services:
+      redis:
+        image: redis
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
     # Define environment variables needed for tests and builds
     env:
       NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
       NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key
       SUPABASE_SERVICE_ROLE_KEY: dummy-service-key
       ADMIN_API_KEY: test-fallback-key
-      UPSTASH_REDIS_URL: rediss://default:dummy@dummy.upstash.io:6379
-      UPSTASH_REDIS_REST_URL: https://dummy.upstash.io
+      UPSTASH_REDIS_URL: redis://default:dummy@127.0.0.1:6379
+      UPSTASH_REDIS_REST_URL: https://127.0.0.1
       UPSTASH_REDIS_REST_TOKEN: dummy
       
     steps:
