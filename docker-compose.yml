@@ -1,0 +1,37 @@
+services:
+  # The Worker Process Container
+  worker:
+    build:
+      context: .
+      dockerfile: packages/queue/Dockerfile
+    container_name: snapforge_worker
+    restart: always
+    environment:
+      # Connect to the redis container below
+      - UPSTASH_REDIS_URL=redis://redis:6379
+      - NODE_ENV=production
+      # You would populate these with real values in production
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-dummy_key}
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-http://localhost:54321}
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-dummy_key}
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # Local Redis instance for the worker to connect to
+  redis:
+    image: redis:7-alpine
+    container_name: snapforge_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:

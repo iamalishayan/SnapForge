@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "main": "src/index.ts",
   "scripts": {
+    "build": "tsc",
     "worker:dev": "tsx --env-file=../../.env.local src/start-worker.ts",
     "worker:start": "node --require dotenv/config dist/start-worker.js"
   },
