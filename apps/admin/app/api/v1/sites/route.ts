@@ -1,15 +1,14 @@
 import { NextResponse } from 'next/server'
 import { DbService } from '@snapforge/db'
-import { suggestKeywords } from '@snapforge/ai'
 import { withValidation } from '../../../../utils/validate'
 import { SiteCreateSchema } from '../../../../utils/schemas'
 import { handleRouteError } from '../../../../utils/error'
 import { logger } from '@snapforge/shared'
 
-// GET /api/sites — list all active site configs
+// GET /api/sites — list all site configs (including inactive) for admin
 export async function GET() {
   try {
-    const sites = await DbService.getSiteConfigs()
+    const sites = await DbService.getSiteConfigs({ activeOnly: false })
     return NextResponse.json({ success: true, data: sites })
   } catch (error: any) {
     return handleRouteError(error, 'GET /api/sites')
@@ -52,47 +51,18 @@ export const POST = withValidation(SiteCreateSchema, async (request, data) => {
       domain,
       language_code,
       country_code,
-      theme_name: (data as any).theme_name || 'theme_a',
-      adsense_publisher_id: (data as any).adsense_publisher_id || null,
-      adsense_slot_id: (data as any).adsense_slot_id || null,
-      monetization_type: (data as any).monetization_type || 'adsense',
-      indexnow_key: (data as any).indexnow_key || null,
-      sitemap_url: (data as any).sitemap_url || null,
-      active: true
+      theme_name: data.theme_name as string || 'theme_a',
+      adsense_publisher_id: data.adsense_publisher_id as string ?? null,
+      adsense_slot_id: data.adsense_slot_id as string ?? null,
+      monetization_type: data.monetization_type || 'adsense',
+      indexnow_key: data.indexnow_key as string ?? null,
+      sitemap_url: data.sitemap_url as string ?? null,
+      active: data.active ?? true,
     })
-
-    // 2. Auto-generate keywords for all existing templates in the new language
-    //    This is where keyword-suggester is called — fired automatically when a site is registered
-    const templates = await DbService.getTemplates()
-    const keywordResults: { template: string; keywords: string[] }[] = []
-
-    for (const template of templates) {
-      try {
-        const keywords = await suggestKeywords(template.name, template.gemini_prompt || '', language_code, country_code)
-
-        if (keywords.length > 0) {
-          await DbService.saveKeywords({
-            template_id: template.id,
-            language_code,
-            country_code,
-            primary_keyword: keywords[0],          // Top suggestion = primary
-            secondary_keywords: keywords.slice(1), // Rest = secondary
-            source: 'gemini-auto'
-          })
-
-          keywordResults.push({ template: template.name, keywords })
-        }
-      } catch (kwErr: any) {
-        // Don't fail the whole request if keyword generation fails for one template
-        logger.warn({ template: template.name, err: kwErr.message }, 'Keyword gen skipped for template')
-      }
-    }
 
     return NextResponse.json({
       success: true,
-      data: siteConfig,
-      keywords_generated: keywordResults.length,
-      keyword_details: keywordResults
+      data: siteConfig
     }, { status: 201 })
   } catch (error: any) {
     return handleRouteError(error, 'POST /api/sites')

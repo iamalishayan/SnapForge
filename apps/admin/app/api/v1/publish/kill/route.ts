@@ -4,24 +4,25 @@ import { revalidationQueue } from '@snapforge/queue'
 import { withValidation } from '../../../../../utils/validate'
 import { PublishKillSchema } from '../../../../../utils/schemas'
 import { handleRouteError } from '../../../../../utils/error'
+import { getTranslationPageSlugs } from '../../translations/page-path'
 
 // POST /api/publish/kill — Emergency unpublish action: flags translation and queues revalidation task
 export const POST = withValidation(PublishKillSchema, async (request, data) => {
   try {
-    const { translationId, domain, templateSlug, reason } = data
+    const { translationId, domain, reason } = data
 
-    // 1. Instantly demote status to flagged
     await DbService.updateTranslationStatus(
       translationId, 
       'flagged', 
       reason || 'Emergency unpublish triggered.'
     )
 
-    // 2. Queue revalidation task to strip live cached version
+    const { templateSlug, articleSlug } = await getTranslationPageSlugs(translationId)
+
     const jobId = `kill___${translationId}`
     await (revalidationQueue as any).add(
       'revalidate',
-      { domain, templateSlug },
+      { domain, templateSlug, articleSlug, requestId: request.headers.get('x-request-id') || undefined },
       { jobId }
     )
 

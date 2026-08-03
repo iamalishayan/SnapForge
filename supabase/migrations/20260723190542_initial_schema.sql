@@ -8,7 +8,6 @@ create table templates (
   slug text not null unique,
   category text,
   gemini_prompt text,
-  preview_image_url text,
   meta_title text,
   meta_description text,
   active boolean default true,

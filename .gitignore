@@ -43,3 +43,14 @@ Architecture.png
 Plan.md
 testarticles/
 testTemplates/
+.stitch/
+.agents/
+implementation_plan.md
+
+### IDEs and Editors
+.cursor/
+.vscode/
+.idea/
+
+### Scratch files
+test_db.ts

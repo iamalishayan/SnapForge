@@ -4,9 +4,8 @@ import { withTimeout } from '@snapforge/shared'
 /**
  * Calls Gemini to suggest the top 5 localized SEO search queries for a given template and locale.
  */
-export async function suggestKeywords(
-  templateName: string,
-  templateContext: string,
+export async function suggestArticleKeywords(
+  articleContent: string,
   languageCode: string,
   countryCode: string
 ): Promise<string[]> {
@@ -22,8 +21,8 @@ export async function suggestKeywords(
   )
 
   const prompt = `You are an expert SEO specialist for the ${languageCode} (${countryCode}) market.
-We need the top 5 highest search-volume, long-tail search queries (2-5 words) that local users in ${countryCode} type into Google to find a free online tool that does: "${templateName}".
-Context about the tool: "${templateContext}"
+We need the top 5 highest search-volume, long-tail search queries (2-5 words) that local users in ${countryCode} type into Google that would lead them to an article with the following content.
+Article Content Preview (first 1000 chars): "${articleContent.substring(0, 1000)}"
 CRITICAL INSTRUCTION: You must provide the search queries STRICTLY AND ONLY in the native language corresponding to the language code '${languageCode}'. Do NOT output English keywords unless the language code is 'en'. Provide natural, highly-searched exact phrases.
 Return only the 5 queries in a JSON array.`
 

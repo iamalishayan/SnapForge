@@ -33,3 +33,19 @@ export const PATCH = withValidation(TemplateUpdateSchema, async (request, data, 
     return handleRouteError(error, 'PATCH /api/templates/[id]')
   }
 })
+
+// DELETE /api/templates/[id] — soft delete a template
+export async function DELETE(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const deletedTemplate = await DbService.deleteTemplate(params.id)
+    return NextResponse.json({ success: true, data: deletedTemplate })
+  } catch (error: any) {
+    if (error.message.includes('No row')) {
+      return NextResponse.json({ success: false, error: 'Template not found.' }, { status: 404 })
+    }
+    return handleRouteError(error, 'DELETE /api/templates/[id]')
+  }
+}

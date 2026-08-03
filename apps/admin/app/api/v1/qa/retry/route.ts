@@ -39,7 +39,8 @@ export const POST = withValidation(QARetrySchema, async (request, data) => {
       targetLanguage: translation.language_code,
       countryCode: translation.country_code,
       primaryKeyword,
-      secondaryKeywords
+      secondaryKeywords,
+      requestId: request.headers.get('x-request-id') || undefined
     }, {
       jobId,
       removeOnComplete: true,

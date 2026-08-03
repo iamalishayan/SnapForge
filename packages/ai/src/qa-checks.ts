@@ -1,6 +1,10 @@
 import * as cheerio from 'cheerio'
 import type { Tables } from '@snapforge/db'
 import type { TranslationResponse } from './translate'
+import {
+  getStructureFingerprint,
+  getStructureMismatchErrors,
+} from './structure-fingerprint'
 
 export interface QAWarning {
   message: string
@@ -8,9 +12,9 @@ export interface QAWarning {
 }
 
 export interface QAResult {
-  passed: boolean       // True only if no blocking errors
-  errors: string[]      // Blocking: broken links, missing keywords, empty/identical content, banned words
-  warnings: QAWarning[] // Non-blocking structured warnings
+  passed: boolean
+  errors: string[]
+  warnings: QAWarning[]
 }
 
 /**
@@ -27,13 +31,11 @@ export async function runAutoQAChecks(
   const errors: string[] = []
   const warnings: QAWarning[] = []
 
-  // Guard: Ensure content exists
   if (!translation.translated_content) {
     errors.push('Translated content is empty.')
     return { passed: false, errors, warnings }
   }
 
-  // Guard: Untranslated-content sanity check (identically echoed content)
   if (translation.translated_content.trim() === originalArticle.content.trim()) {
     errors.push('Translated content is identical to original — translation may have failed silently.')
   }
@@ -41,81 +43,92 @@ export async function runAutoQAChecks(
   const $ = cheerio.load(translation.translated_content)
   const $orig = cheerio.load(originalArticle.content)
 
-  // 1. Ratio checks (Coping with non-whitespace-delimited CJK languages)
+  const sourceFp = getStructureFingerprint(originalArticle.content)
+
+  errors.push(
+    ...getStructureMismatchErrors(originalArticle.content, translation.translated_content)
+  )
+
+  if (!sourceFp.hasFaq && (translation.translated_faq?.length ?? 0) > 0) {
+    errors.push(
+      `FAQ invented: source has no FAQ structure but translation has ${translation.translated_faq.length} FAQ entries`
+    )
+  }
+
   const cjkLangs = ['Chinese', 'Japanese', 'Thai', 'Korean']
-  const isCJK = cjkLangs.some(lang => targetLanguage.toLowerCase().includes(lang.toLowerCase()))
+  const isCJK = cjkLangs.some((lang) =>
+    targetLanguage.toLowerCase().includes(lang.toLowerCase())
+  )
 
   if (!isCJK) {
     const originalWords = originalArticle.content.split(/\s+/).filter(Boolean).length
     const translatedWords = translation.translated_content.split(/\s+/).filter(Boolean).length
     const ratio = translatedWords / (originalWords || 1)
-    if (ratio < 0.7 || ratio > 1.3) {
+
+    if (ratio > 2.0 || ratio < 0.5) {
+      errors.push(
+        `Word count ratio out of bounds: ${ratio.toFixed(2)} (allowed 0.5 - 2.0)`
+      )
+    } else if (ratio < 0.7 || ratio > 1.3) {
       warnings.push({
         message: `Word count ratio is borderline: ${ratio.toFixed(2)} (expected 0.7 - 1.3)`,
-        severity: 'minor'
+        severity: 'minor',
       })
     }
   } else {
-    // Character-based length comparison for CJK
     const originalChars = originalArticle.content.length
     const translatedChars = translation.translated_content.length
     const ratio = translatedChars / (originalChars || 1)
-    if (ratio < 0.5 || ratio > 2.0) {
+
+    if (ratio > 3.0 || ratio < 0.3) {
+      errors.push(
+        `CJK character length ratio out of bounds: ${ratio.toFixed(2)} (allowed 0.3 - 3.0)`
+      )
+    } else if (ratio < 0.5 || ratio > 2.0) {
       warnings.push({
         message: `CJK character length ratio is borderline: ${ratio.toFixed(2)} (expected 0.5 - 2.0)`,
-        severity: 'minor'
+        severity: 'minor',
       })
     }
   }
 
-  // 2. Placeholder check (looks for raw variables like {site_name})
   const placeholderRegex = /\{[a-zA-Z0-9_-]+\}/g
   let placeholders = Array.from(translation.translated_content.match(placeholderRegex) || [])
-  
-  // Whitelist intentional placeholders that the frontend will resolve at render time
   const allowedPlaceholders = ['{tool_name}']
-  placeholders = placeholders.filter(p => !allowedPlaceholders.includes(p))
+  placeholders = placeholders.filter((p) => !allowedPlaceholders.includes(p))
 
   if (placeholders.length > 0) {
     errors.push(`Unresolved placeholders found: ${Array.from(new Set(placeholders)).join(', ')}`)
   }
 
-
-  // 3. HTML tag validation (H1 tag count check)
-  const originalH1Count = $orig('h1').length
-  const translatedH1Count = $('h1').length
-  if (translatedH1Count !== originalH1Count) {
-    errors.push(`H1 count mismatch: original has ${originalH1Count}, translation has ${translatedH1Count}`)
-  }
-
-  // 4. Link count AND integrity validation (matches actual target values in order)
   const originalHrefs = $orig('a').map((_, el) => $orig(el).attr('href')).get()
   const translatedHrefs = $('a').map((_, el) => $(el).attr('href')).get()
 
   if (originalHrefs.length !== translatedHrefs.length) {
-    errors.push(`Anchor link count mismatch: original has ${originalHrefs.length}, translation has ${translatedHrefs.length}`)
+    errors.push(
+      `Anchor link count mismatch: original has ${originalHrefs.length}, translation has ${translatedHrefs.length}`
+    )
   } else {
-    const mismatchedIndices: number[] = []
     const mismatchedValues: string[] = []
-    
+
     for (let i = 0; i < originalHrefs.length; i++) {
       if (originalHrefs[i] !== translatedHrefs[i]) {
-        mismatchedIndices.push(i)
         mismatchedValues.push(`"${translatedHrefs[i]}" (expected "${originalHrefs[i]}")`)
       }
     }
 
-    if (mismatchedIndices.length > 0) {
-      errors.push(`Anchor href values changed or drifted out of order: ${mismatchedValues.join(', ')}`)
+    if (mismatchedValues.length > 0) {
+      errors.push(
+        `Anchor href values changed or drifted out of order: ${mismatchedValues.join(', ')}`
+      )
     }
   }
 
-  // 5. SEO metadata length boundaries with severity mapping
   const titleOverage = translation.translated_meta_title.length - 60
   if (titleOverage > 0) {
     warnings.push({
       message: `SEO Meta Title exceeds 60 characters (${translation.translated_meta_title.length} chars)`,
-      severity: titleOverage > 6 ? 'moderate' : 'minor' // More than 10% over is moderate
+      severity: titleOverage > 6 ? 'moderate' : 'minor',
     })
   }
 
@@ -123,43 +136,41 @@ export async function runAutoQAChecks(
   if (descOverage > 0) {
     warnings.push({
       message: `SEO Meta Description exceeds 155 characters (${translation.translated_meta_description.length} chars)`,
-      severity: descOverage > 15 ? 'moderate' : 'minor' // More than 10% over is moderate
+      severity: descOverage > 15 ? 'moderate' : 'minor',
     })
   }
 
-  // 6. Keyword coverage check
   if (primaryKeyword) {
-    const haystack = (translation.translated_content + ' ' + translation.translated_meta_description).toLowerCase()
-    
-    // Primary keyword MUST be present (blocking error)
+    const haystack = (
+      translation.translated_content + ' ' + translation.translated_meta_description
+    ).toLowerCase()
+
     if (!haystack.includes(primaryKeyword.toLowerCase())) {
       errors.push(`Missing primary keyword: "${primaryKeyword}"`)
     }
-    
-    // Secondary keywords are often rephrased by the AI or translated differently.
-    // Making them blocking errors fails too many valid translations, so we log them as warnings instead.
+
     for (const kw of secondaryKeywords) {
       if (!haystack.includes(kw.toLowerCase())) {
         warnings.push({
           message: `Secondary keyword "${kw}" not found verbatim in content.`,
-          severity: 'minor'
+          severity: 'minor',
         })
       }
     }
   }
 
-  // 6a. Primary keyword should ideally appear in title / meta title (SEO-critical placement)
   if (primaryKeyword) {
-    const titleHaystack = (translation.translated_title + ' ' + translation.translated_meta_title).toLowerCase()
+    const titleHaystack = (
+      translation.translated_title + ' ' + translation.translated_meta_title
+    ).toLowerCase()
     if (!titleHaystack.includes(primaryKeyword.toLowerCase())) {
       warnings.push({
         message: `Primary keyword "${primaryKeyword}" missing from title/meta title — recommended for SEO`,
-        severity: 'moderate'
+        severity: 'moderate',
       })
     }
   }
 
-  // 7. Banned words / Spam check
   const bannedWords = ['casino', 'viagra', 'click here', 'buy now']
   const contentLower = translation.translated_content.toLowerCase()
   for (const word of bannedWords) {
@@ -171,6 +182,6 @@ export async function runAutoQAChecks(
   return {
     passed: errors.length === 0,
     errors,
-    warnings
+    warnings,
   }
 }

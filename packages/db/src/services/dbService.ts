@@ -1,29 +1,6 @@
 import { createAdminClient } from '../server'
 import type { Database, Tables, TablesInsert, TablesUpdate } from '../types'
-let purifyInstance: any = null
 
-export function sanitizeHtml(dirty: string): string {
-  if (!purifyInstance) {
-    // Lazy load JSDOM and DOMPurify to prevent Next.js build errors
-    // JSDOM does fs.readFileSync during initialization which breaks Next.js static generation
-    const { JSDOM } = require('jsdom')
-    const DOMPurify = require('dompurify')
-    
-    const window = new JSDOM('').window
-    purifyInstance = DOMPurify(window)
-    
-    // Optional: Add a hook to force all links to open in a new tab securely
-    purifyInstance.addHook('afterSanitizeAttributes', function(node: any) {
-      if ('target' in node) {
-        node.setAttribute('target', '_blank')
-        node.setAttribute('rel', 'noopener noreferrer')
-      }
-    })
-  }
-
-  // By NOT providing ALLOWED_TAGS, we use DOMPurify's default heavily-researched list.
-  return purifyInstance.sanitize(dirty) as string
-}
 
 // Let client be instantiated on-demand inside the service methods
 
@@ -90,6 +67,19 @@ export class DbService {
     return data
   }
 
+  static async deleteTemplate(id: string) {
+    // Soft delete by setting deleted_at
+    const { data, error } = await this.client
+      .from('templates')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw new Error(`Failed to delete template ${id}: ${error.message}`)
+    return data
+  }
+
   // --- ARTICLES ---
   static async getArticles(opts?: { limit?: number; cursor?: string }) {
     const limit = Math.min(opts?.limit || 20, 100)
@@ -121,10 +111,21 @@ export class DbService {
     return data
   }
 
+  static async getArticleByTemplateAndSlug(templateId: string, slug: string) {
+    const { data, error } = await this.client
+      .from('articles')
+      .select('id')
+      .eq('template_id', templateId)
+      .eq('slug', slug)
+      .is('deleted_at', null)
+      .maybeSingle()
+
+    if (error) throw new Error(`Failed to lookup article slug: ${error.message}`)
+    return data
+  }
+
   static async createArticle(article: TablesInsert<'articles'>) {
-    if (article.content) {
-      article.content = sanitizeHtml(article.content)
-    }
+    // Sanitization should happen at the API/Client level, not the DB layer.
     const { data, error } = await this.client
       .from('articles')
       .insert(article)
@@ -136,9 +137,7 @@ export class DbService {
   }
 
   static async updateArticle(id: string, updates: TablesUpdate<'articles'>) {
-    if (updates.content) {
-      updates.content = sanitizeHtml(updates.content)
-    }
+    // Sanitization should happen at the API/Client level, not the DB layer.
     const { data, error } = await this.client
       .from('articles')
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -163,11 +162,44 @@ export class DbService {
   }
 
   // --- SITE CONFIGURATIONS ---
-  static async getSiteConfigs() {
+  /** @param activeOnly default true — pipeline callers; pass false for admin config UI */
+  static async getSiteConfigByDomain(domain: string) {
     const { data, error } = await this.client
       .from('site_configs')
       .select('*')
-      .eq('active', true)
+      .eq('domain', domain)
+      .single()
+    if (error && error.code !== 'PGRST116') throw error
+    return data || null
+  }
+
+  static async getPublishedArticlesForDomain(domain: string, limit?: number) {
+    let query = this.client
+      .from('translations')
+      .select('*, articles!inner(slug, templates!inner(slug)), site_configs!inner(domain)')
+      .eq('site_configs.domain', domain)
+      .eq('status', 'published')
+      .is('deleted_at', null)
+      .order('updated_at', { ascending: false })
+      
+    if (limit) {
+      query = query.limit(limit)
+    }
+
+    const { data, error } = await query
+    if (error) throw error
+    return data || []
+  }
+
+  static async getSiteConfigs(options?: { activeOnly?: boolean }) {
+    const activeOnly = options?.activeOnly !== false
+    let query = this.client.from('site_configs').select('*').order('domain')
+
+    if (activeOnly) {
+      query = query.eq('active', true)
+    }
+
+    const { data, error } = await query
 
     if (error) throw new Error(`Failed to fetch site configs: ${error.message}`)
     return data
@@ -212,8 +244,9 @@ export class DbService {
     const limit = Math.min(filters?.limit || 20, 100)
     let query = this.client
       .from('translations')
-      .select('*, articles(title), site_configs(domain, language_code)')
+      .select('*, articles!inner(title), site_configs(domain, language_code)')
       .is('deleted_at', null)
+      .is('articles.deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -243,13 +276,15 @@ export class DbService {
     return data
   }
 
-  static async getPublishedTranslation(domain: string, templateSlug: string) {
+  static async getPublishedTranslation(domain: string, templateSlug: string, articleSlug: string) {
     const { data, error } = await this.client
       .from('translations')
-      .select('*, site_configs!inner(domain), articles!inner(templates!inner(slug))')
+      .select('*, site_configs!inner(domain), articles!inner(slug, templates!inner(slug))')
       .eq('site_configs.domain', domain)
       .eq('articles.templates.slug', templateSlug)
-      .eq('status', 'qa_approved')
+      .eq('articles.slug', articleSlug)
+      .eq('status', 'published')
+      .is('deleted_at', null)
       .maybeSingle()
 
     if (error) throw new Error(`Failed to fetch published translation: ${error.message}`)
@@ -279,6 +314,18 @@ export class DbService {
       .single()
 
     if (error) throw new Error(`Failed to upsert translation: ${error.message}`)
+    return data
+  }
+
+  static async updateTranslation(id: string, updates: TablesUpdate<'translations'>) {
+    const { data, error } = await this.client
+      .from('translations')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw new Error(`Failed to update translation ${id}: ${error.message}`)
     return data
   }
 
@@ -320,34 +367,27 @@ export class DbService {
   }
 
   // --- KEYWORDS ---
-  static async getKeywordsForTemplate(templateId: string, languageCode: string) {
+
+  static async getKeywordsByArticleAndLanguage(articleId: string, languageCode: string) {
     const { data, error } = await this.client
       .from('keywords')
       .select('*')
-      .eq('template_id', templateId)
+      .eq('article_id', articleId)
       .eq('language_code', languageCode)
-      .maybeSingle()
+      .single()
 
-    if (error) throw new Error(`Failed to fetch keywords: ${error.message}`)
+    // .single() throws if no rows match, but we don't want to fail, just return null
+    if (error && error.code !== 'PGRST116') {
+      throw new Error(`Failed to fetch keywords: ${error.message}`)
+    }
     return data
   }
 
-  static async getKeywordsForTemplateBatch(templateId: string, languageCodes: string[]) {
-    if (languageCodes.length === 0) return []
-    const { data, error } = await this.client
-      .from('keywords')
-      .select('*')
-      .eq('template_id', templateId)
-      .in('language_code', languageCodes)
-
-    if (error) throw new Error(`Failed to fetch batched keywords: ${error.message}`)
-    return data || []
-  }
 
   static async saveKeywords(payload: TablesInsert<'keywords'>) {
     const { data, error } = await this.client
       .from('keywords')
-      .upsert(payload, { onConflict: 'template_id,language_code' })
+      .upsert(payload, { onConflict: 'article_id,language_code' })
       .select()
       .single()
 
@@ -386,6 +426,159 @@ export class DbService {
 
     if (error) throw new Error(`Failed to insert publish log: ${error.message}`)
     return data
+  }
+
+  static async getPublishLogs(filters?: { limit?: number; cursor?: string; siteId?: string }) {
+    const limit = Math.min(filters?.limit || 50, 100)
+    let query = this.client
+      .from('publish_log')
+      .select('*, translations(translated_title), site_configs(domain)')
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    if (filters?.siteId) {
+      query = query.eq('site_config_id', filters.siteId)
+    }
+    if (filters?.cursor) {
+      query = query.lt('created_at', filters.cursor)
+    }
+
+    const { data, error } = await query
+    if (error) throw new Error(`Failed to fetch publish logs: ${error.message}`)
+    return data
+  }
+
+  // --- DASHBOARD STATS ---
+  static async getDashboardStats() {
+    // We execute these concurrently for speed
+    const [
+      { count: templatesCount },
+      { count: activeSitesCount },
+      { count: totalTranslations },
+      { data: funnelData },
+      recentPublishLogs
+    ] = await Promise.all([
+      this.client.from('templates').select('*', { count: 'exact', head: true }).is('deleted_at', null),
+      this.client.from('site_configs').select('*', { count: 'exact', head: true }).eq('active', true),
+      this.client.from('translations').select('*', { count: 'exact', head: true }).is('deleted_at', null),
+      (async () => {
+        try {
+          return await (this.client as any).rpc('get_translation_status_counts')
+        } catch (e) {
+          return null
+        }
+      })(), // If RPC doesn't exist, we fallback
+      this.getPublishLogs({ limit: 5 })
+    ])
+
+    // Fallback if RPC isn't deployed: query distinct counts manually
+    let pipeline = funnelData
+    if (!pipeline) {
+      const statuses = ['staging', 'qa_queue', 'qa_approved', 'published', 'flagged']
+      const counts = await Promise.all(
+        statuses.map(status =>
+          this.client.from('translations')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', status)
+            .is('deleted_at', null)
+        )
+      )
+      pipeline = statuses.reduce((acc, status, idx) => {
+        acc[status] = counts[idx].count || 0
+        return acc
+      }, {} as Record<string, number>)
+    } else {
+      // Format RPC response if it exists
+      pipeline = (pipeline as any[]).reduce((acc, row) => {
+        acc[row.status] = row.count
+        return acc
+      }, {} as Record<string, number>)
+    }
+
+    return {
+      overview: {
+        templates: templatesCount || 0,
+        activeSites: activeSitesCount || 0,
+        totalTranslations: totalTranslations || 0,
+      },
+      pipeline,
+      recentActivity: recentPublishLogs
+    }
+  }
+
+  // --- ANALYTICS & MONITORING ---
+  static async getCostAnalytics(days: number = 30) {
+    const cutoffDate = new Date()
+    cutoffDate.setDate(cutoffDate.getDate() - days)
+    
+    // We fetch all records in the date range, then group them in JS to keep DB load low
+    const { data: logs, error } = await this.client
+      .from('cost_log')
+      .select('*, translations(translated_title)')
+      .gte('created_at', cutoffDate.toISOString())
+      .order('created_at', { ascending: false })
+
+    if (error) throw new Error(`Failed to fetch cost analytics: ${error.message}`)
+
+    const totalCost = logs.reduce((sum, log) => sum + Number(log.estimated_cost_usd || 0), 0)
+    
+    // Group by model
+    const costByModel = logs.reduce((acc, log) => {
+      const model = log.model || 'unknown'
+      acc[model] = (acc[model] || 0) + Number(log.estimated_cost_usd || 0)
+      return acc
+    }, {} as Record<string, number>)
+
+    // Group by day (YYYY-MM-DD)
+    const dailySpend = logs.reduce((acc, log) => {
+      const day = log.created_at.split('T')[0]
+      acc[day] = (acc[day] || 0) + Number(log.estimated_cost_usd || 0)
+      return acc
+    }, {} as Record<string, number>)
+
+    return {
+      totalCost,
+      costByModel: Object.entries(costByModel).map(([name, value]) => ({ name, value })),
+      dailySpend: Object.entries(dailySpend).map(([date, cost]) => ({ date, cost })).sort((a, b) => a.date.localeCompare(b.date)),
+      rawLogs: logs
+    }
+  }
+
+  static async getMonitoringStats(days: number = 30) {
+    const cutoffDate = new Date()
+    cutoffDate.setDate(cutoffDate.getDate() - days)
+
+    const { data: stats, error } = await this.client
+      .from('indexing_stats')
+      .select('*, site_configs(domain)')
+      .gte('date', cutoffDate.toISOString().split('T')[0])
+      .order('date', { ascending: true })
+
+    if (error) throw new Error(`Failed to fetch monitoring stats: ${error.message}`)
+
+    // Aggregate by date across all sites
+    const dailyAggregates = stats.reduce((acc, stat) => {
+      const day = stat.date
+      if (!acc[day]) {
+        acc[day] = { date: day, clicks: 0, impressions: 0, avg_position: 0, count: 0 }
+      }
+      acc[day].clicks += stat.total_clicks || 0
+      acc[day].impressions += stat.total_impressions || 0
+      acc[day].avg_position += stat.avg_position || 0
+      acc[day].count += 1
+      return acc
+    }, {} as Record<string, { date: string; clicks: number; impressions: number; avg_position: number; count: number }>)
+
+    // Average the avg_position
+    const dailyStats = Object.values(dailyAggregates).map(day => ({
+      ...day,
+      avg_position: day.count > 0 ? day.avg_position / day.count : 0
+    }))
+
+    return {
+      dailyStats,
+      rawStats: stats
+    }
   }
 }
 

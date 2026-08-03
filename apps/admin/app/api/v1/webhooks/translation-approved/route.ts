@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { DbService } from '@snapforge/db'
 import { handleRouteError } from '../../../../../utils/error'
+import { getTranslationPageSlugs, buildPublicPageUrl } from '../../translations/page-path'
 import { revalidationQueue } from '@snapforge/queue'
 import { pingIndexNow, logger } from '@snapforge/shared'
 
@@ -40,20 +41,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Site config not found.' }, { status: 404 })
     }
 
-    // Fetch the article for the template slug (used as URL path)
-    const article = await DbService.getArticleById(record.article_id)
-    const templateSlug = (article as any)?.templates?.slug || 'unknown'
-    const pageUrl = `https://${site.domain}/${templateSlug}`
+    const { templateSlug, articleSlug } = await getTranslationPageSlugs(record.id)
+    const pageUrl = buildPublicPageUrl(site.domain, templateSlug, articleSlug)
 
-    // Sanitize domain for BullMQ jobId (replace colons from ports like localhost:3009)
     const safeDomain = site.domain.replace(/:/g, '_')
 
-    // 1. Enqueue ISR revalidation job via BullMQ
     await (revalidationQueue as any).add('revalidate', {
       domain: site.domain,
-      templateSlug
+      templateSlug,
+      articleSlug,
+      requestId: request.headers.get('x-request-id') || undefined
     }, {
-      jobId: `revalidate___${safeDomain}___${templateSlug}`,
+      jobId: `revalidate___${safeDomain}___${templateSlug}___${articleSlug}`,
       removeOnComplete: true,
       removeOnFail: false
     })

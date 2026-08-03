@@ -84,9 +84,7 @@ pnpm lint
 - `pnpm tsx scripts/seed-db.ts` - placeholder for seeding local development data
 - `pnpm tsx scripts/add-site.ts` - placeholder for onboarding a new site
 
-
 ## Notes
 
 - The repo uses a pnpm workspace defined in `pnpm-workspace.yaml`.
 - `apps/admin` and `apps/sites` are separate Next.js apps with their own local ports.
-- Generated Supabase CLI state under `supabase/.temp/` is ignored.

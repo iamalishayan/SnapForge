@@ -1,0 +1,2 @@
+-- Drop the preview_image_url column from templates table
+ALTER TABLE templates DROP COLUMN IF EXISTS preview_image_url;

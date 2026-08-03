@@ -4,20 +4,21 @@ import { revalidationQueue } from '@snapforge/queue'
 import { withValidation } from '../../../../../utils/validate'
 import { QAApproveSchema } from '../../../../../utils/schemas'
 import { handleRouteError } from '../../../../../utils/error'
+import { getTranslationPageSlugs } from '../../translations/page-path'
 
 // POST /api/qa/approve — Marks translation as approved and queues revalidation task
 export const POST = withValidation(QAApproveSchema, async (request, data) => {
   try {
-    const { translationId, domain, templateSlug } = data
+    const { translationId, domain } = data
 
-    // Update status to approved
-    await DbService.updateTranslationStatus(translationId, 'qa_approved', 'Approved manually via admin UI.')
+    await DbService.updateTranslationStatus(translationId, 'published', 'Approved manually via admin UI.')
 
-    // Queue revalidation task so the site clears its cache
+    const { templateSlug, articleSlug } = await getTranslationPageSlugs(translationId)
+
     const jobId = `revalidate___${translationId}`
     await (revalidationQueue as any).add(
       'revalidate',
-      { domain, templateSlug },
+      { domain, templateSlug, articleSlug, requestId: request.headers.get('x-request-id') || undefined },
       { jobId }
     )
 

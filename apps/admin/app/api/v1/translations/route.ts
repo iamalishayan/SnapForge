@@ -2,6 +2,10 @@ import { handleRouteError } from '../../../../utils/error'
 import { NextResponse } from 'next/server'
 import { DbService } from '@snapforge/db'
 
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+export const revalidate = 0
+
 // GET /api/translations — list all translations with optional status filter
 // Query params: ?status=qa_queue, ?status=published, ?articleId=uuid
 export async function GET(request: Request) {

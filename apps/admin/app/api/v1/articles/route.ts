@@ -1,21 +1,31 @@
 import { NextResponse } from 'next/server'
 import { DbService } from '@snapforge/db'
 import { ArticleCreateSchema } from '../../../../utils/schemas'
-import { parseHtmlArticle } from './utils'
+import { parseHtmlArticle, prepareArticleContent } from './utils'
+import { validateArticleTemplateId } from './validate-template'
+import { resolveArticleSlug } from './resolve-slug'
 import { handleRouteError } from '../../../../utils/error'
+
 // POST /api/articles — Upload a new article to the database
 // Accepts either:
-//   Mode A: raw HTML string with embedded <!-- META --> comment block (like testarticles/*.html)
+//   Mode A: raw HTML string (text/html) with x-template-id header
 //   Mode B: structured JSON with all fields explicitly provided
 export async function POST(request: Request) {
   try {
-    const contentType = request.headers.get('content-type') || ''
 
+
+    const contentType = request.headers.get('content-type') || ''
     let articleData: any = {}
 
     // --- MODE A: raw HTML string ---
     if (contentType.includes('text/html') || contentType.includes('text/plain')) {
       const rawHtml = await request.text()
+      
+      // Security Guardrail: Max 2MB file size for memory-safe DOM parsing
+      if (Buffer.byteLength(rawHtml, 'utf8') > 2 * 1024 * 1024) {
+        return NextResponse.json({ success: false, error: 'HTML payload exceeds 2MB limit' }, { status: 413 })
+      }
+
       articleData = parseHtmlArticle(rawHtml)
       
       // Extract template ID from headers since HTML doesn't include it
@@ -23,7 +33,7 @@ export async function POST(request: Request) {
       if (templateIdHeader) {
         articleData.template_id = templateIdHeader
       }
-    }
+    } 
     // --- MODE B: structured JSON ---
     else {
       let body: any
@@ -33,15 +43,19 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: false, error: 'Invalid JSON payload' }, { status: 400 })
       }
 
-      // If a 'html' field is passed in JSON, parse it like Mode A
       if (body.html) {
         articleData = parseHtmlArticle(body.html)
-        // Allow JSON overrides on top of parsed values
         if (body.template_id) articleData.template_id = body.template_id
         if (body.status) articleData.status = body.status
         if (body.priority) articleData.priority = body.priority
       } else {
-        articleData = body
+        const prepared =
+          typeof body.content === 'string'
+            ? prepareArticleContent(body.content)
+            : { content: body.content, inner_links: [], outer_links: [] }
+
+        const { inner_links, outer_links, content, ...rest } = body
+        articleData = { ...rest, ...prepared }
       }
     }
 
@@ -57,24 +71,23 @@ export async function POST(request: Request) {
 
     const validData = parsed.data
 
-    if (!validData.template_id) {
-      return NextResponse.json(
-        { success: false, error: 'A valid template_id is strictly required. Provide it in the JSON body or via the x-template-id header.' },
-        { status: 400 }
-      )
-    }
+    const templateError = await validateArticleTemplateId(validData.template_id)
+    if (templateError) return templateError
+
+    const slug = await resolveArticleSlug(validData.title, validData.template_id, validData.slug)
 
     const article = await DbService.createArticle({
       title: validData.title,
+      slug,
       content: validData.content,
-      meta_title: validData.meta_title || null,
-      meta_description: validData.meta_description || null,
-      og_image_url: validData.og_image_url || null,
-      inner_links: validData.inner_links || [],
-      outer_links: validData.outer_links || [],
-      template_id: validData.template_id || null,
-      status: articleData.status || 'draft',
-      priority: articleData.priority || 'normal'
+      meta_title: validData.meta_title ?? null,
+      meta_description: validData.meta_description ?? null,
+      og_image_url: validData.og_image_url ?? null,
+      inner_links: articleData.inner_links ?? [],
+      outer_links: articleData.outer_links ?? [],
+      template_id: validData.template_id,
+      status: validData.status || 'draft',
+      priority: validData.priority || 'normal',
     } as any)
 
     return NextResponse.json({ success: true, data: article }, { status: 201 })

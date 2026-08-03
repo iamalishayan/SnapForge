@@ -7,13 +7,66 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
+      api_keys: {
+        Row: {
+          active: boolean | null
+          created_at: string | null
+          id: string
+          key_hash: string
+          last_used_at: string | null
+          name: string
+          owner: string | null
+          scope: string
+        }
+        Insert: {
+          active?: boolean | null
+          created_at?: string | null
+          id?: string
+          key_hash: string
+          last_used_at?: string | null
+          name: string
+          owner?: string | null
+          scope: string
+        }
+        Update: {
+          active?: boolean | null
+          created_at?: string | null
+          id?: string
+          key_hash?: string
+          last_used_at?: string | null
+          name?: string
+          owner?: string | null
+          scope?: string
+        }
+        Relationships: []
+      }
       articles: {
         Row: {
           content: string
@@ -28,8 +81,9 @@ export type Database = {
           priority: string | null
           published_at: string | null
           scheduled_at: string | null
+          slug: string
           status: string | null
-          template_id: string | null
+          template_id: string
           title: string
           updated_at: string | null
         }
@@ -46,8 +100,9 @@ export type Database = {
           priority?: string | null
           published_at?: string | null
           scheduled_at?: string | null
+          slug: string
           status?: string | null
-          template_id?: string | null
+          template_id: string
           title: string
           updated_at?: string | null
         }
@@ -64,8 +119,9 @@ export type Database = {
           priority?: string | null
           published_at?: string | null
           scheduled_at?: string | null
+          slug?: string
           status?: string | null
-          template_id?: string | null
+          template_id?: string
           title?: string
           updated_at?: string | null
         }
@@ -160,6 +216,7 @@ export type Database = {
       }
       keywords: {
         Row: {
+          article_id: string
           country_code: string
           created_at: string | null
           id: string
@@ -168,9 +225,9 @@ export type Database = {
           search_volume: number | null
           secondary_keywords: Json | null
           source: string | null
-          template_id: string | null
         }
         Insert: {
+          article_id: string
           country_code: string
           created_at?: string | null
           id?: string
@@ -179,9 +236,9 @@ export type Database = {
           search_volume?: number | null
           secondary_keywords?: Json | null
           source?: string | null
-          template_id?: string | null
         }
         Update: {
+          article_id?: string
           country_code?: string
           created_at?: string | null
           id?: string
@@ -190,14 +247,13 @@ export type Database = {
           search_volume?: number | null
           secondary_keywords?: Json | null
           source?: string | null
-          template_id?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "keywords_template_id_fkey"
-            columns: ["template_id"]
+            foreignKeyName: "keywords_article_id_fkey"
+            columns: ["article_id"]
             isOneToOne: false
-            referencedRelation: "templates"
+            referencedRelation: "articles"
             referencedColumns: ["id"]
           },
         ]
@@ -353,7 +409,6 @@ export type Database = {
           meta_description: string | null
           meta_title: string | null
           name: string
-          preview_image_url: string | null
           slug: string
           updated_at: string | null
         }
@@ -367,7 +422,6 @@ export type Database = {
           meta_description?: string | null
           meta_title?: string | null
           name: string
-          preview_image_url?: string | null
           slug: string
           updated_at?: string | null
         }
@@ -381,7 +435,6 @@ export type Database = {
           meta_description?: string | null
           meta_title?: string | null
           name?: string
-          preview_image_url?: string | null
           slug?: string
           updated_at?: string | null
         }
@@ -620,7 +673,11 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
 } as const
+

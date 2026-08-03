@@ -4,16 +4,49 @@ import { translationQueue } from '@snapforge/queue'
 import { withValidation } from '../../../../utils/validate'
 import { TranslateRequestSchema } from '../../../../utils/schemas'
 import { handleRouteError } from '../../../../utils/error'
+import { validateArticleTemplateId } from '../articles/validate-template'
+import { validateArticleForTranslation } from '@snapforge/ai'
 
 // POST /api/translate — Fans out translation jobs to all active sites for a given articleId
 export const POST = withValidation(TranslateRequestSchema, async (request, data) => {
   try {
-    const { articleId, siteConfigId, force } = data
+
+
+    const { articleId, siteConfigIds, force } = data
 
     // 1. Fetch original article context
     const article = await DbService.getArticleById(articleId)
     if (!article) {
       return NextResponse.json({ success: false, error: 'Article not found.' }, { status: 404 })
+    }
+
+    if (!article.template_id) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Article has no template_id. Assign a template before translating.',
+        },
+        { status: 400 }
+      )
+    }
+
+    if (article.status !== 'ready') {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Article must be marked "ready" before translating. Save the article with status ready or use Send to Translation.',
+        },
+        { status: 400 }
+      )
+    }
+
+    const templateError = await validateArticleTemplateId(article.template_id)
+    if (templateError) return templateError
+
+    const translatable = validateArticleForTranslation(article.content || '')
+    if (translatable.ok === false) {
+      return NextResponse.json({ success: false, error: translatable.error }, { status: 400 })
     }
 
     // 2. Fetch all active site configurations
@@ -22,11 +55,11 @@ export const POST = withValidation(TranslateRequestSchema, async (request, data)
       return NextResponse.json({ success: false, error: 'No active site configurations found.' }, { status: 400 })
     }
 
-    // Filter by specific site if requested
-    if (siteConfigId) {
-      sites = sites.filter((site: any) => site.id === siteConfigId)
+    // Filter by specific sites if requested
+    if (siteConfigIds && siteConfigIds.length > 0) {
+      sites = sites.filter((site: any) => siteConfigIds.includes(site.id))
       if (sites.length === 0) {
-        return NextResponse.json({ success: false, error: 'The specified siteConfigId was not found or is inactive.' }, { status: 404 })
+        return NextResponse.json({ success: false, error: 'None of the specified siteConfigIds were found or active.' }, { status: 404 })
       }
     }
 
@@ -47,22 +80,14 @@ export const POST = withValidation(TranslateRequestSchema, async (request, data)
 
     const enqueuedJobs = []
 
-    // 2.5 Batch fetch keywords for all target languages
-    const targetLangs = Array.from(new Set(sites.map((s: any) => s.language_code))) as string[]
-    const allKeywords = await DbService.getKeywordsForTemplateBatch(article.template_id!, targetLangs)
-    const keywordsByLang = new Map(allKeywords.map((k: any) => [k.language_code, k]))
-
     // 3. Queue one translation job per site target
     for (const site of sites) {
-      const keywords = keywordsByLang.get(site.language_code)
-
       const payload = {
         articleId,
         siteConfigId: site.id,
         targetLanguage: site.language_code,
         countryCode: site.country_code,
-        primaryKeyword: keywords?.primary_keyword || undefined,
-        secondaryKeywords: (keywords?.secondary_keywords as string[]) || []
+        requestId: request.headers.get('x-request-id') || undefined
       }
 
       // Generate a deterministic jobId to prevent duplicate enqueues (BullMQ rejects colons)

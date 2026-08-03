@@ -15,6 +15,9 @@ export interface TranslationResponse {
   output_tokens: number
 }
 
+export const model = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '')
+  .getGenerativeModel({ model: 'gemini-2.5-flash' }, { apiVersion: 'v1beta' })
+
 /**
  * Direct interface to translate content using Google Gemini API.
  * Configured with strict JSON Schema output to guarantee structural validity.
@@ -27,18 +30,7 @@ export async function translateArticle(
   secondaryKeywords?: string[],
   templatePrompt?: string | null
 ): Promise<TranslationResponse> {
-  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
-  if (!apiKey) {
-    throw new Error('Google Generative AI key is missing in environments.')
-  }
-
-  const genAI = new GoogleGenerativeAI(apiKey)
   const modelName = 'gemini-2.5-flash'
-  // Using gemini-1.5-flash for cost-efficient, fast schema localization
-  const model = genAI.getGenerativeModel(
-    { model: modelName },
-    { apiVersion: 'v1beta' }
-  )
 
   const prompt = buildTranslationPrompt({
     article,
@@ -53,6 +45,7 @@ export async function translateArticle(
     model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: {
+        temperature: 0,
         responseMimeType: 'application/json',
         responseSchema: {
           type: SchemaType.OBJECT,
@@ -67,21 +60,20 @@ export async function translateArticle(
                 type: SchemaType.OBJECT,
                 properties: {
                   question: { type: SchemaType.STRING },
-                  answer: { type: SchemaType.STRING }
+                  answer: { type: SchemaType.STRING },
                 },
-                required: ['question', 'answer']
-              }
-            }
+                required: ['question', 'answer'],
+              },
+            },
           },
           required: [
             'translated_title',
             'translated_content',
             'translated_meta_title',
             'translated_meta_description',
-            'translated_faq'
-          ]
-        }
-      }
+          ],
+        },
+      },
     }),
     60_000,
     'Gemini translation timeout after 60s'
@@ -105,7 +97,7 @@ export async function translateArticle(
     translated_content: parsed.translated_content,
     translated_meta_title: parsed.translated_meta_title,
     translated_meta_description: parsed.translated_meta_description,
-    translated_faq: parsed.translated_faq,
+    translated_faq: parsed.translated_faq ?? [],
     model_used: modelName,
     input_tokens,
     output_tokens

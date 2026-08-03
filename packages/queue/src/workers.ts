@@ -1,7 +1,7 @@
 import { Worker } from 'bullmq'
 import { connection } from './connection'
 import { DbService } from '@snapforge/db'
-import { translateArticle, runAutoQAChecks } from '@snapforge/ai'
+import { translateArticle, runAutoQAChecks, suggestArticleKeywords } from '@snapforge/ai'
 import { logger, withTimeout } from '@snapforge/shared'
 import type { TranslationJobPayload, RevalidationJobPayload } from './types'
 
@@ -14,9 +14,9 @@ import type { TranslationJobPayload, RevalidationJobPayload } from './types'
 export const translationWorker = new Worker<TranslationJobPayload>(
   'translation-jobs',
   async (job) => {
-    const { articleId, siteConfigId, targetLanguage, countryCode, primaryKeyword, secondaryKeywords } = job.data
+    const { articleId, siteConfigId, targetLanguage, countryCode, requestId } = job.data
 
-    logger.info({ jobId: job.id, articleId, targetLanguage, countryCode }, 'Processing translation')
+    logger.info({ jobId: job.id, requestId, articleId, targetLanguage, countryCode }, 'Processing translation')
 
     // 1. Fetch original article context (includes joined template data)
     const article = await DbService.getArticleById(articleId)
@@ -26,6 +26,32 @@ export const translationWorker = new Worker<TranslationJobPayload>(
 
     // Pull the per-tool Gemini prompt from the linked template (if any)
     const templatePrompt = (article as any).templates?.gemini_prompt ?? null
+
+    // 1.5 Fetch or Generate SEO Keywords for this specific article
+    let keywords = await DbService.getKeywordsByArticleAndLanguage(articleId, targetLanguage)
+    
+    let primaryKeyword: string | undefined = undefined
+    let secondaryKeywords: string[] = []
+    
+    if (!keywords) {
+      const suggested = await suggestArticleKeywords(article.content || '', targetLanguage, countryCode)
+      if (suggested.length > 0) {
+        primaryKeyword = suggested[0]
+        secondaryKeywords = suggested.slice(1)
+        
+        await DbService.saveKeywords({
+          article_id: articleId,
+          language_code: targetLanguage,
+          country_code: countryCode,
+          primary_keyword: primaryKeyword,
+          secondary_keywords: secondaryKeywords,
+          source: 'gemini-article-auto'
+        })
+      }
+    } else {
+      primaryKeyword = keywords.primary_keyword
+      secondaryKeywords = (keywords.secondary_keywords as string[]) || []
+    }
 
     // 2. Call AI Translator with optional per-tool prompt guidance
     const translation = await translateArticle(
@@ -78,7 +104,7 @@ export const translationWorker = new Worker<TranslationJobPayload>(
       estimated_cost_usd: (translation.input_tokens * 0.000075) + (translation.output_tokens * 0.0003) // Gemini price estimator
     })
 
-    logger.info({ jobId: job.id, qaPassed: qaResult.passed }, 'Finished translation job')
+    logger.info({ jobId: job.id, requestId, qaPassed: qaResult.passed }, 'Finished translation job')
   },
   {
     connection: connection as any,
@@ -108,7 +134,7 @@ function isValidPublicDomain(domain: string): boolean {
 export const revalidationWorker = new Worker<RevalidationJobPayload>(
   'revalidation-jobs',
   async (job) => {
-    const { templateSlug, domain } = job.data
+    const { templateSlug, articleSlug, domain, requestId } = job.data
     const revalidationSecret = process.env.REVALIDATION_SECRET
 
     if (!revalidationSecret) {
@@ -119,7 +145,7 @@ export const revalidationWorker = new Worker<RevalidationJobPayload>(
       throw new Error(`SSRF protection blocked request to: ${domain}`)
     }
 
-    logger.info({ jobId: job.id, domain, templateSlug }, 'Triggering revalidation')
+    logger.info({ jobId: job.id, requestId, domain, templateSlug }, 'Triggering revalidation')
 
     const protocol = domain.includes('localhost') ? 'http' : 'https'
     const revalidateUrl = `${protocol}://${domain}/api/revalidate`
@@ -130,7 +156,7 @@ export const revalidationWorker = new Worker<RevalidationJobPayload>(
           'Content-Type': 'application/json',
           'x-revalidation-secret': revalidationSecret
         },
-        body: JSON.stringify({ templateSlug, domain })
+        body: JSON.stringify({ templateSlug, articleSlug, domain })
       }),
       10_000,
       'Revalidation webhook timeout after 10s'
@@ -142,7 +168,7 @@ export const revalidationWorker = new Worker<RevalidationJobPayload>(
       throw new Error(`Revalidation request failed. HTTP Status: ${response.status}. Detail: ${responseBody}`)
     }
 
-    logger.info({ jobId: job.id, domain, templateSlug }, 'Revalidated page')
+    logger.info({ jobId: job.id, requestId, domain, templateSlug }, 'Revalidated page')
   },
   {
     connection: connection as any,
@@ -166,7 +192,7 @@ translationWorker.on('failed', async (job, err) => {
       originalPayload: job.data,
       error: err.message
     })
-    logger.error({ jobId: job.id, err: err.message }, 'Translation Job permanently failed')
+    logger.error({ jobId: job.id, requestId: job.data.requestId, err: err.message }, 'Translation Job permanently failed')
   }
 })
 
@@ -176,6 +202,6 @@ revalidationWorker.on('failed', async (job, err) => {
       originalPayload: job.data,
       error: err.message
     })
-    logger.error({ jobId: job.id, err: err.message }, 'Revalidation Job permanently failed')
+    logger.error({ jobId: job.id, requestId: job.data.requestId, err: err.message }, 'Revalidation Job permanently failed')
   }
 })

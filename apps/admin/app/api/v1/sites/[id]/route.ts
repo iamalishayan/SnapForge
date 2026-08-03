@@ -24,7 +24,7 @@ export async function GET(
 // Allowed fields: domain, language_code, country_code, theme_name, adsense_publisher_id, adsense_slot_id, indexnow_key, sitemap_url, active
 export const PATCH = withValidation(SiteUpdateSchema, async (request, data, context: { params: { id: string } }) => {
   try {
-    const updatedSite = await DbService.updateSiteConfig(context.params.id, data)
+    const updatedSite = await DbService.updateSiteConfig(context.params.id, data as any)
     return NextResponse.json({ success: true, data: updatedSite })
   } catch (error: any) {
     if (error.message.includes('No row')) {

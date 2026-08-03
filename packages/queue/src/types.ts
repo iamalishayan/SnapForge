@@ -3,13 +3,14 @@ export interface TranslationJobPayload {
   siteConfigId: string
   targetLanguage: string
   countryCode: string
-  primaryKeyword?: string
-  secondaryKeywords: string[]
+  requestId?: string
 }
 
 export interface RevalidationJobPayload {
   domain: string
   templateSlug: string
+  articleSlug: string
+  requestId?: string
 }
 
 

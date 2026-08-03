@@ -1,11 +1,24 @@
 import { z } from 'zod'
+import { emptyToNull } from './normalize-seo'
+import { ARTICLE_STATUSES } from '../lib/article-status'
 
 // Shared schemas
 const uuidSchema = z.string().uuid()
 
+const optionalSeoText = (max: number) =>
+  z.preprocess(
+    (val) => (val === undefined ? undefined : emptyToNull(val as string | null | undefined)),
+    z.string().max(max).nullable().optional()
+  )
+
+const optionalSeoUrl = z.preprocess(
+  (val) => (val === undefined ? undefined : emptyToNull(val as string | null | undefined)),
+  z.union([z.string().url(), z.null()]).optional()
+)
+
 export const TranslateRequestSchema = z.object({
   articleId: uuidSchema,
-  siteConfigId: uuidSchema.optional(),
+  siteConfigIds: z.array(uuidSchema).optional(),
   targetLanguage: z.string().min(2).max(10).optional(),
   countryCode: z.string().length(2).optional(),
   primaryKeyword: z.string().max(100).optional(),
@@ -15,27 +28,50 @@ export const TranslateRequestSchema = z.object({
 
 export const ArticleCreateSchema = z.object({
   title: z.string().min(1).max(255),
-  slug: z.string().min(1).max(255),
-  content: z.string().optional(),
-  category: z.string().max(100).optional(),
-  author: z.string().max(100).optional(),
-  template_id: uuidSchema.optional(),
-  meta_title: z.string().max(255).optional(),
-  meta_description: z.string().max(500).optional(),
-  og_image_url: z.string().url().optional(),
-  inner_links: z.any().optional(),
-  outer_links: z.any().optional(),
-  target_keywords: z.array(z.string()).optional()
+  content: z.string().min(1, 'Content is required'),
+  template_id: uuidSchema,
+  slug: z
+    .string()
+    .min(1)
+    .max(80)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug must be lowercase letters, numbers, and hyphens')
+    .optional(),
+  meta_title: optionalSeoText(255),
+  meta_description: optionalSeoText(500),
+  og_image_url: optionalSeoUrl,
+  status: z.enum(ARTICLE_STATUSES).optional().default('draft'),
+  priority: z.enum(['high', 'normal', 'low']).optional(),
 })
 
-export const ArticleUpdateSchema = ArticleCreateSchema.partial()
+export const ArticleUpdateSchema = ArticleCreateSchema.partial().refine(
+  (data) => data.template_id !== null,
+  { message: 'template_id cannot be cleared once set', path: ['template_id'] }
+)
+
+const optionalSiteText = z.preprocess(
+  (val) => emptyToNull(val as string | null | undefined),
+  z.string().nullable().optional()
+)
+
+const optionalSiteUrl = z.preprocess(
+  (val) => emptyToNull(val as string | null | undefined),
+  z.union([z.string().url(), z.null()]).optional()
+)
 
 export const SiteCreateSchema = z.object({
   domain: z.string().min(1).max(255),
-  site_name: z.string().min(1).max(255),
   language_code: z.string().min(2).max(10).default('en'),
-  country_code: z.string().length(2).optional(),
-  active: z.boolean().default(true)
+  country_code: z
+    .string()
+    .length(2, 'Country code must be a 2-letter ISO code')
+    .transform((v) => v.toUpperCase()),
+  active: z.boolean().default(true),
+  theme_name: z.enum(['light', 'dark']).default('dark'),
+  adsense_publisher_id: optionalSiteText,
+  adsense_slot_id: optionalSiteText,
+  monetization_type: z.enum(['adsense', 'affiliate', 'own_service', 'mixed']).optional(),
+  indexnow_key: optionalSiteText,
+  sitemap_url: optionalSiteUrl,
 })
 
 export const SiteUpdateSchema = SiteCreateSchema.partial()
@@ -52,11 +88,36 @@ export const TemplateCreateSchema = z.object({
 
 export const TemplateUpdateSchema = TemplateCreateSchema.partial()
 
+export const TranslationUpdateSchema = z
+  .object({
+    translated_title: z.string().min(1).max(500).optional(),
+    translated_content: z.string().min(1, 'Content is required').optional(),
+    translated_meta_title: optionalSeoText(255),
+    translated_meta_description: optionalSeoText(500),
+    translated_faq: z
+      .array(
+        z.object({
+          question: z.string().min(1),
+          answer: z.string().min(1),
+        })
+      )
+      .optional(),
+  })
+  .refine(
+    (data) =>
+      data.translated_title !== undefined ||
+      data.translated_content !== undefined ||
+      data.translated_meta_title !== undefined ||
+      data.translated_meta_description !== undefined ||
+      data.translated_faq !== undefined,
+    { message: 'At least one translation field is required' }
+  )
+
 export const QAApproveSchema = z.object({
   translationId: uuidSchema,
   domain: z.string().min(1),
-  templateSlug: z.string().min(1),
-  reviewerNotes: z.string().max(1000).optional()
+  templateSlug: z.string().min(1).optional(),
+  reviewerNotes: z.string().max(1000).optional(),
 })
 
 export const QAFlagSchema = z.object({
