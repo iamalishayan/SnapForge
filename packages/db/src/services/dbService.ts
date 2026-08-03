@@ -531,7 +531,7 @@ export class DbService {
 
     // Group by day (YYYY-MM-DD)
     const dailySpend = logs.reduce((acc, log) => {
-      const day = log.created_at.split('T')[0]
+      const day = log.created_at ? log.created_at.split('T')[0] : 'Unknown'
       acc[day] = (acc[day] || 0) + Number(log.estimated_cost_usd || 0)
       return acc
     }, {} as Record<string, number>)

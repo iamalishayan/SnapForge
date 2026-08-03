@@ -4,11 +4,14 @@ import { emptyToNull } from '../../../../utils/normalize-seo'
 
 /** Shared XSS blocklist used by Mode A parse + Mode B/PATCH sanitize. */
 const SANITIZE_OPTIONS = {
-  allowedTags: false as const,
-  allowedAttributes: false as const,
-  nonTextTags: ['script', 'style', 'iframe', 'noscript', 'object', 'embed', 'applet'],
-  exclusiveFilter: function (frame: { tag: string }) {
-    return frame.tag === 'script' || frame.tag === 'style'
+  allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'video', 'audio', 'source', 'iframe']),
+  allowedAttributes: {
+    ...sanitizeHtml.defaults.allowedAttributes,
+    '*': ['class', 'id', 'style', 'data-*'],
+    iframe: ['src', 'width', 'height', 'frameborder', 'allow', 'allowfullscreen'],
+    video: ['src', 'controls', 'width', 'height', 'autoplay', 'loop', 'muted', 'poster'],
+    audio: ['src', 'controls', 'autoplay', 'loop', 'muted'],
+    source: ['src', 'type'],
   },
   enforceHtmlBoundary: true,
   allowProtocolRelative: false,

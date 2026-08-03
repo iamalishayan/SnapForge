@@ -66,7 +66,10 @@ export const SiteCreateSchema = z.object({
     .length(2, 'Country code must be a 2-letter ISO code')
     .transform((v) => v.toUpperCase()),
   active: z.boolean().default(true),
-  theme_name: z.enum(['light', 'dark']).default('dark'),
+  theme_name: z.preprocess(
+    (val) => emptyToNull(val as string | null | undefined),
+    z.enum(['light', 'dark']).nullable().optional().default('dark')
+  ),
   adsense_publisher_id: optionalSiteText,
   adsense_slot_id: optionalSiteText,
   monetization_type: z.enum(['adsense', 'affiliate', 'own_service', 'mixed']).optional(),
