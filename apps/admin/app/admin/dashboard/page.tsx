@@ -3,6 +3,7 @@
 import { useDashboardStats } from "@/lib/hooks/use-data";
 import { StatCards } from "@/components/dashboard/StatCards";
 import { PipelineFunnel } from "@/components/dashboard/PipelineFunnel";
+import { FailedTranslationsCard } from "@/components/dashboard/FailedTranslationsCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Activity, Clock } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -78,6 +79,8 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <FailedTranslationsCard />
     </div>
   );
 }

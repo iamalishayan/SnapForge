@@ -16,11 +16,11 @@ export const POST = withValidation(QARetrySchema, async (request, data) => {
       return NextResponse.json({ success: false, error: 'Translation not found.' }, { status: 404 })
     }
 
-    // 2. Reset the status to 'staging' to clear the 'flagged' state
+    // 2. Reset to processing and clear last error before re-queue
     await DbService.updateTranslationStatus(
-      translationId, 
-      'staging', 
-      'Re-queued for translation by QA retry endpoint.'
+      translationId,
+      'processing',
+      'Re-queued for translation.'
     )
 
     // Extract keywords safely for TypeScript
@@ -30,9 +30,13 @@ export const POST = withValidation(QARetrySchema, async (request, data) => {
     const primaryKeyword = keywords.length > 0 ? keywords[0] : ''
     const secondaryKeywords = keywords.length > 1 ? keywords.slice(1) : []
 
-    // 3. Re-queue the translation job in BullMQ
-    // The worker will upsert and overwrite this existing row when finished
+    // 3. Re-queue the translation job in BullMQ (remove stale failed job with same id)
     const jobId = `${translation.article_id}___${translation.site_config_id}`
+    const existingJob = await (translationQueue as any).getJob(jobId)
+    if (existingJob) {
+      await existingJob.remove()
+    }
+
     await (translationQueue as any).add('translate', {
       articleId: translation.article_id,
       siteConfigId: translation.site_config_id,

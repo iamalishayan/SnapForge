@@ -197,6 +197,15 @@ importers:
       '@types/react':
         specifier: ^18.0.0
         version: 18.3.31
+      autoprefixer:
+        specifier: ^10.5.4
+        version: 10.5.4(postcss@8.5.23)
+      postcss:
+        specifier: ^8.5.23
+        version: 8.5.23
+      tailwindcss:
+        specifier: ^3.4.19
+        version: 3.4.19(tsx@4.23.1)
       typescript:
         specifier: ^5.0.0
         version: 5.9.3

@@ -45,6 +45,7 @@ export function useTranslations(status?: string) {
       fetchApi<{ success: boolean; data: any[]; pagination?: { nextCursor: string | null; limit: number } }>(
         status ? `/translations?status=${status}` : "/translations"
       ),
+    refetchInterval: status === "failed" || status === "processing" ? 15_000 : false,
   })
 }
 

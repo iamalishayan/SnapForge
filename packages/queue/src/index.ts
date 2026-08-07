@@ -6,10 +6,10 @@ import type { TranslationJobPayload, RevalidationJobPayload, ImageTranslationJob
 export const translationQueue = new Queue<TranslationJobPayload, any, string>('translation-jobs', { 
   connection: connection as any,
   defaultJobOptions: {
-    attempts: 3,
+    attempts: 5,
     backoff: {
       type: 'exponential',
-      delay: 5000 // Retry starting at 5s delay, scaling exponentially
+      delay: 15000 // Retry starting at 15s for Gemini 503/429 spikes
     }
   }
 })

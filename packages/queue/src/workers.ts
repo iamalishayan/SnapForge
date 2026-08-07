@@ -33,6 +33,25 @@ export const translationWorker = new Worker<TranslationJobPayload>(
 
     logger.info({ jobId: job.id, requestId, articleId, targetLanguage, countryCode }, 'Processing translation')
 
+    // Mark in-progress so UI shows retries as processing (not stuck failed)
+    try {
+      await DbService.markTranslationProcessing(
+        articleId,
+        siteConfigId,
+        targetLanguage,
+        countryCode
+      )
+    } catch (statusErr) {
+      logger.warn(
+        {
+          requestId,
+          articleId,
+          err: statusErr instanceof Error ? statusErr.message : statusErr,
+        },
+        'Failed to mark translation processing'
+      )
+    }
+
     // 1. Fetch original article context (includes joined template data)
     const article = await DbService.getArticleById(articleId)
     if (!article) {
@@ -105,6 +124,7 @@ export const translationWorker = new Worker<TranslationJobPayload>(
       qa_auto_passed: qaResult.passed,
       qa_auto_errors: qaResult.errors,
       qa_auto_warnings: qaResult.warnings as any, // Safely persist structured warnings
+      last_error: null,
 
       model_used: translation.model_used,
       token_count: translation.output_tokens
@@ -294,12 +314,43 @@ imageTranslationWorker.on('failed', async (job, err) => {
 })
 
 translationWorker.on('failed', async (job, err) => {
-  if (job && job.attemptsMade >= (job.opts.attempts || 3)) {
+  if (!job) {
+    return
+  }
+
+  if (job.attemptsMade >= (job.opts.attempts || 5)) {
+    try {
+      await DbService.markTranslationFailed(
+        job.data.articleId,
+        job.data.siteConfigId,
+        err.message
+      )
+    } catch (updateErr) {
+      logger.error(
+        {
+          jobId: job.id,
+          articleId: job.data.articleId,
+          err: updateErr instanceof Error ? updateErr.message : updateErr,
+        },
+        'Failed to persist translation failure status'
+      )
+    }
+
     await dlq.add('failed-translation', {
       originalPayload: job.data,
       error: err.message
     })
     logger.error({ jobId: job.id, requestId: job.data.requestId, err: err.message }, 'Translation Job permanently failed')
+  } else {
+    logger.warn(
+      {
+        jobId: job.id,
+        requestId: job.data.requestId,
+        attempt: job.attemptsMade,
+        err: err.message,
+      },
+      'Translation job failed; will retry'
+    )
   }
 })
 

@@ -1,5 +1,6 @@
 // Barrel export — translate, qa-checks, keywords, fingerprint, image localization
 export * from './translate'
+export * from './llm-providers'
 export * from './qa-checks'
 export * from './keyword-suggester'
 export * from './structure-fingerprint'

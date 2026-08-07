@@ -69,8 +69,10 @@ export default function TranslateDialog({
       });
       
       toast({
-        title: "Success",
-        description: res.message || "Translation jobs queued successfully.",
+        title: "Jobs queued",
+        description:
+          res.message ||
+          "Translation jobs are processing. Failures will appear on the dashboard.",
       });
       onSuccess();
       onClose();

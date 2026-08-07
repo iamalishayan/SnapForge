@@ -3,6 +3,7 @@ import { DbService } from '@snapforge/db'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import Script from 'next/script'
+import { resolveSiteFromHost } from '../../../lib/request-domain'
 
 type Props = {
   params: { templateSlug: string; articleSlug: string }
@@ -59,9 +60,10 @@ function SiteChrome({
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const host = headers().get('host') || ''
-  const domain = host
+  const resolved = await resolveSiteFromHost(headers().get('host'))
+  if (!resolved) return {}
 
+  const { domain } = resolved
   const translation = await DbService.getPublishedTranslation(
     domain,
     params.templateSlug,
@@ -86,15 +88,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function ArticlePage({ params }: Props) {
-  const host = headers().get('host') || ''
-  const domain = host
+  const resolved = await resolveSiteFromHost(headers().get('host'))
+  if (!resolved?.siteConfig?.active) {
+    return notFound()
+  }
 
-  const [translation, siteConfig] = await Promise.all([
-    DbService.getPublishedTranslation(domain, params.templateSlug, params.articleSlug),
-    DbService.getSiteConfigByDomain(domain),
-  ])
+  const { domain, siteConfig } = resolved
+  const translation = await DbService.getPublishedTranslation(
+    domain,
+    params.templateSlug,
+    params.articleSlug
+  )
 
-  if (!translation || !siteConfig || !siteConfig.active) {
+  if (!translation) {
     return notFound()
   }
 

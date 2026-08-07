@@ -484,6 +484,7 @@ export type Database = {
           image_translation_needed: boolean | null
           inner_links: Json | null
           language_code: string
+          last_error: string | null
           model_used: string | null
           outer_links: Json | null
           qa_auto_errors: Json | null
@@ -513,6 +514,7 @@ export type Database = {
           image_translation_needed?: boolean | null
           inner_links?: Json | null
           language_code: string
+          last_error?: string | null
           model_used?: string | null
           outer_links?: Json | null
           qa_auto_errors?: Json | null
@@ -542,6 +544,7 @@ export type Database = {
           image_translation_needed?: boolean | null
           inner_links?: Json | null
           language_code?: string
+          last_error?: string | null
           model_used?: string | null
           outer_links?: Json | null
           qa_auto_errors?: Json | null

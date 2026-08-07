@@ -90,8 +90,21 @@ export const POST = withValidation(TranslateRequestSchema, async (request, data)
         requestId: request.headers.get('x-request-id') || undefined
       }
 
+      // Placeholder row so admin UI shows processing before the worker finishes
+      await DbService.markTranslationProcessing(
+        articleId,
+        site.id,
+        site.language_code,
+        site.country_code
+      )
+
       // Generate a deterministic jobId to prevent duplicate enqueues (BullMQ rejects colons)
       const jobId = `${articleId}___${site.id}`
+
+      const existingJob = await (translationQueue as any).getJob(jobId)
+      if (existingJob) {
+        await existingJob.remove()
+      }
 
       const job = await (translationQueue as any).add('translate', payload, {
         jobId,
@@ -106,7 +119,10 @@ export const POST = withValidation(TranslateRequestSchema, async (request, data)
       })
     }
 
-    return NextResponse.json({ success: true, message: `Queued ${enqueuedJobs.length} translation jobs across ${sites.length} sites.` })
+    return NextResponse.json({
+      success: true,
+      message: `Queued ${enqueuedJobs.length} translation job(s). Status will show as processing; failures appear on the dashboard.`,
+    })
   } catch (error: any) {
     return handleRouteError(error, 'POST /api/translate')
   }

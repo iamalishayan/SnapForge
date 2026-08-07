@@ -320,6 +320,39 @@ export class DbService {
     return data
   }
 
+  /**
+   * Set status=processing without wiping existing translated_* fields.
+   */
+  static async markTranslationProcessing(
+    articleId: string,
+    siteConfigId: string,
+    languageCode: string,
+    countryCode: string
+  ) {
+    const { data: existing } = await this.client
+      .from('translations')
+      .select('id')
+      .eq('article_id', articleId)
+      .eq('site_config_id', siteConfigId)
+      .maybeSingle()
+
+    if (existing) {
+      return this.updateTranslation(existing.id, {
+        status: 'processing',
+        last_error: null,
+      })
+    }
+
+    return this.upsertTranslation({
+      article_id: articleId,
+      site_config_id: siteConfigId,
+      language_code: languageCode,
+      country_code: countryCode,
+      status: 'processing',
+      last_error: null,
+    })
+  }
+
   static async updateTranslation(id: string, updates: TablesUpdate<'translations'>) {
     const { data, error } = await this.client
       .from('translations')
@@ -346,6 +379,14 @@ export class DbService {
       updatePayload.qa_human_reviewed = true
     }
 
+    // Clear last_error when leaving failed/processing for a successful pipeline state
+    if (status === 'processing') {
+      updatePayload.last_error = null
+    }
+    if (['staging', 'qa_queue', 'qa_approved', 'published'].includes(status)) {
+      updatePayload.last_error = null
+    }
+
     const { data, error } = await this.client
       .from('translations')
       .update(updatePayload)
@@ -354,6 +395,35 @@ export class DbService {
       .single()
 
     if (error) throw new Error(`Failed to update translation status for ${id}: ${error.message}`)
+    return data
+  }
+
+  /**
+   * Mark a translation as permanently failed after BullMQ retries are exhausted.
+   */
+  static async markTranslationFailed(
+    articleId: string,
+    siteConfigId: string,
+    errorMessage: string
+  ) {
+    const truncated =
+      errorMessage.length > 2000 ? `${errorMessage.slice(0, 2000)}…` : errorMessage
+
+    const { data, error } = await this.client
+      .from('translations')
+      .update({
+        status: 'failed',
+        last_error: truncated,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('article_id', articleId)
+      .eq('site_config_id', siteConfigId)
+      .select()
+      .maybeSingle()
+
+    if (error) {
+      throw new Error(`Failed to mark translation failed: ${error.message}`)
+    }
     return data
   }
 
@@ -519,7 +589,15 @@ export class DbService {
     // Fallback if RPC isn't deployed: query distinct counts manually
     let pipeline = funnelData
     if (!pipeline) {
-      const statuses = ['staging', 'qa_queue', 'qa_approved', 'published', 'flagged']
+      const statuses = [
+        'processing',
+        'failed',
+        'staging',
+        'qa_queue',
+        'qa_approved',
+        'published',
+        'flagged',
+      ]
       const counts = await Promise.all(
         statuses.map(status =>
           this.client.from('translations')
