@@ -13,4 +13,9 @@ export interface RevalidationJobPayload {
   requestId?: string
 }
 
+export interface ImageTranslationJobPayload {
+  translationId: string
+  requestId?: string
+}
+
 

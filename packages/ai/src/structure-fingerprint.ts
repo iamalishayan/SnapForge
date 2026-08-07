@@ -10,6 +10,11 @@ export interface StructureFingerprint {
   li: number
   a: number
   img: number
+  section: number
+  nav: number
+  header: number
+  footer: number
+  div: number
   wordCount: number
   hasFaq: boolean
   blockCount: number
@@ -18,7 +23,24 @@ export interface StructureFingerprint {
 export const MIN_TRANSLATION_WORDS = 50
 export const MIN_TRANSLATION_BLOCKS = 2
 
-const TAG_KEYS = ['h1', 'h2', 'h3', 'p', 'ul', 'ol', 'li', 'a'] as const
+/** Chunk HTML when source exceeds this char length (avoids mid-page Gemini omission). */
+export const CHUNK_TRANSLATE_THRESHOLD = 6_000
+
+const TAG_KEYS = [
+  'h1',
+  'h2',
+  'h3',
+  'p',
+  'ul',
+  'ol',
+  'li',
+  'a',
+  'section',
+  'nav',
+  'header',
+  'footer',
+  'div',
+] as const
 
 /** Parses HTML into a deterministic structure fingerprint for prompt + QA. */
 export function getStructureFingerprint(html: string): StructureFingerprint {
@@ -33,6 +55,11 @@ export function getStructureFingerprint(html: string): StructureFingerprint {
   const li = $('li').length
   const a = $('a').length
   const img = $('img').length
+  const section = $('section').length
+  const nav = $('nav').length
+  const header = $('header').length
+  const footer = $('footer').length
+  const div = $('div').length
 
   const text = $.root().text().replace(/\s+/g, ' ').trim()
   const wordCount = text ? text.split(/\s+/).filter(Boolean).length : 0
@@ -45,7 +72,25 @@ export function getStructureFingerprint(html: string): StructureFingerprint {
 
   const blockCount = p + h1 + h2 + h3 + ul + ol + li
 
-  return { h1, h2, h3, p, ul, ol, li, a, img, wordCount, hasFaq, blockCount }
+  return {
+    h1,
+    h2,
+    h3,
+    p,
+    ul,
+    ol,
+    li,
+    a,
+    img,
+    section,
+    nav,
+    header,
+    footer,
+    div,
+    wordCount,
+    hasFaq,
+    blockCount,
+  }
 }
 
 /** Formats fingerprint for injection into the translation prompt. */
@@ -53,7 +98,8 @@ export function formatFingerprintForPrompt(fp: StructureFingerprint): string {
   return (
     `Source structure: h1=${fp.h1}, h2=${fp.h2}, h3=${fp.h3}, p=${fp.p}, ` +
     `ul=${fp.ul}, ol=${fp.ol}, li=${fp.li}, a=${fp.a}, img=${fp.img}, ` +
-    `wordCount=${fp.wordCount}, hasFaq=${fp.hasFaq}. Output MUST preserve the same tag counts.`
+    `section=${fp.section}, nav=${fp.nav}, header=${fp.header}, footer=${fp.footer}, div=${fp.div}, ` +
+    `wordCount=${fp.wordCount}, hasFaq=${fp.hasFaq}. Output MUST preserve the same tag counts, nesting, and class/id/style attributes.`
   )
 }
 
@@ -68,7 +114,9 @@ export function getStructureMismatchErrors(
 
   for (const tag of TAG_KEYS) {
     if (source[tag] !== translated[tag]) {
-      errors.push(`${tag.toUpperCase()} count mismatch: original has ${source[tag]}, translation has ${translated[tag]}`)
+      errors.push(
+        `${tag.toUpperCase()} count mismatch: original has ${source[tag]}, translation has ${translated[tag]}`
+      )
     }
   }
 
@@ -98,4 +146,54 @@ export function validateArticleForTranslation(content: string): ArticleTranslata
   }
 
   return { ok: true }
+}
+
+/**
+ * Split HTML into top-level chunks for sequential translation.
+ * Large wrappers (e.g. <article>) are further split into their children
+ * so middle sections are not dropped under output pressure.
+ */
+export function splitHtmlIntoChunks(html: string): Array<{ html: string; needsTranslation: boolean }> {
+  const $ = cheerio.load(html || '', null, false)
+  const children = $.root().children().toArray()
+
+  if (children.length === 0) {
+    const text = $.root().text().replace(/\s+/g, ' ').trim()
+    return [{ html: html || '', needsTranslation: text.length > 0 }]
+  }
+
+  const result: Array<{ html: string; needsTranslation: boolean }> = []
+
+  for (const el of children) {
+    const node = $(el)
+    const chunkHtml = $.html(el) || ''
+    const text = node.text().replace(/\s+/g, ' ').trim()
+    const tag = (el as any).tagName?.toLowerCase?.() || ''
+
+    // Unwrap large containers so sections translate independently
+    if (
+      chunkHtml.length >= CHUNK_TRANSLATE_THRESHOLD / 2 &&
+      ['article', 'main', 'div'].includes(tag) &&
+      node.children().length > 1
+    ) {
+      const openTag = chunkHtml.match(/^<[^>]+>/)?.[0] || `<${tag}>`
+      const closeTag = `</${tag}>`
+      result.push({ html: openTag, needsTranslation: false })
+
+      node.children().each((_, child) => {
+        const childHtml = $.html(child) || ''
+        const childText = $(child).text().replace(/\s+/g, ' ').trim()
+        result.push({ html: childHtml, needsTranslation: childText.length > 0 })
+      })
+
+      result.push({ html: closeTag, needsTranslation: false })
+      continue
+    }
+
+    result.push({ html: chunkHtml, needsTranslation: text.length > 0 })
+  }
+
+  return result.length > 0
+    ? result
+    : [{ html: html || '', needsTranslation: true }]
 }

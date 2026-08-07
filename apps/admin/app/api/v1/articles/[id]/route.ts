@@ -3,7 +3,7 @@ import { DbService } from '@snapforge/db'
 import { withValidation } from '../../../../../utils/validate'
 import { ArticleUpdateSchema } from '../../../../../utils/schemas'
 import { handleRouteError } from '../../../../../utils/error'
-import { prepareArticleContent } from '../utils'
+import { normalizeArticleCss, prepareArticleContent } from '../utils'
 import { validateArticleTemplateId } from '../validate-template'
 import { normalizeArticleSeoFields } from '../../../../../utils/normalize-seo'
 
@@ -35,6 +35,10 @@ export const PATCH = withValidation(ArticleUpdateSchema, async (request, data, c
     if (typeof updates.content === 'string') {
       const prepared = prepareArticleContent(updates.content)
       Object.assign(updates, prepared)
+    }
+
+    if (updates.article_css !== undefined) {
+      updates.article_css = normalizeArticleCss(updates.article_css as string | null)
     }
 
     normalizeArticleSeoFields(updates)

@@ -30,6 +30,8 @@ describe('buildTranslationPrompt', () => {
 
     expect(prompt).toContain('Source structure:')
     expect(prompt).toContain('h2=1')
+    expect(prompt).toContain('section=')
+    expect(prompt).toContain('class/id/style')
     expect(prompt).toContain('TRANSLATE ONLY')
   })
 

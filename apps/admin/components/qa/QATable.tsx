@@ -3,7 +3,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Eye, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Eye, ImageIcon, Loader2, XCircle } from "lucide-react";
 
 export type QAQueueRow = {
   id: string;
@@ -13,6 +13,7 @@ export type QAQueueRow = {
   qa_auto_passed?: boolean | null;
   qa_auto_errors?: unknown;
   qa_auto_warnings?: unknown;
+  image_translation_needed?: boolean | null;
   translated_title?: string | null;
   articles?: { title?: string | null } | null;
   site_configs?: { domain?: string | null; language_code?: string | null } | null;
@@ -69,6 +70,9 @@ export default function QATable({ rows, isLoading, onInspect }: QATableProps) {
             <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Auto QA
             </TableHead>
+            <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Images
+            </TableHead>
             <TableHead className="text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Actions
             </TableHead>
@@ -105,6 +109,19 @@ export default function QATable({ rows, isLoading, onInspect }: QATableProps) {
                       <XCircle className="h-3 w-3" />
                       {errors || "Issues"}
                     </Badge>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {row.image_translation_needed ? (
+                    <Badge
+                      variant="outline"
+                      className="gap-1 border-amber-500/20 bg-amber-500/10 text-[10px] uppercase tracking-widest text-amber-400"
+                    >
+                      <ImageIcon className="h-3 w-3" />
+                      Review
+                    </Badge>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
                   )}
                 </TableCell>
                 <TableCell className="text-right">

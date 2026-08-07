@@ -1,6 +1,6 @@
 import { Queue } from 'bullmq'
 import { connection } from './connection'
-import type { TranslationJobPayload, RevalidationJobPayload } from './types'
+import type { TranslationJobPayload, RevalidationJobPayload, ImageTranslationJobPayload } from './types'
 
 // BullMQ Queue wrappers with retry configurations
 export const translationQueue = new Queue<TranslationJobPayload, any, string>('translation-jobs', { 
@@ -30,11 +30,26 @@ export const deadLetterQueue = new Queue<any, any, string>('dead-letter-jobs', {
   connection: connection as any
 })
 
+export const imageTranslationQueue = new Queue<ImageTranslationJobPayload, any, string>(
+  'image-translation-jobs',
+  {
+    connection: connection as any,
+    defaultJobOptions: {
+      attempts: 2,
+      backoff: {
+        type: 'exponential',
+        delay: 5000,
+      },
+    },
+  }
+)
+
 
 
 export * from './types'
 export * from './workers'
 export * from './connection'
+export * from './image-translation-processor'
 
 
 

@@ -1,5 +1,11 @@
-// Barrel export — exposes translate, qa-checks, keyword-suggester, structure fingerprint
+// Barrel export — translate, qa-checks, keywords, fingerprint, image localization
 export * from './translate'
 export * from './qa-checks'
 export * from './keyword-suggester'
 export * from './structure-fingerprint'
+export * from './extract-image-urls'
+export * from './fetch-image'
+export * from './image-classify'
+export * from './image-templates/manifest'
+export * from './image-templates/render'
+export * from './rewrite-image-src'

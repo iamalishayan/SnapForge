@@ -180,6 +180,7 @@ export class DbService {
       .eq('site_configs.domain', domain)
       .eq('status', 'published')
       .is('deleted_at', null)
+      .is('articles.deleted_at', null)
       .order('updated_at', { ascending: false })
       
     if (limit) {
@@ -279,12 +280,14 @@ export class DbService {
   static async getPublishedTranslation(domain: string, templateSlug: string, articleSlug: string) {
     const { data, error } = await this.client
       .from('translations')
-      .select('*, site_configs!inner(domain), articles!inner(slug, templates!inner(slug))')
+      .select('*, site_configs!inner(domain), articles!inner(slug, article_css, templates!inner(slug))')
       .eq('site_configs.domain', domain)
       .eq('articles.templates.slug', templateSlug)
       .eq('articles.slug', articleSlug)
       .eq('status', 'published')
       .is('deleted_at', null)
+      .is('articles.deleted_at', null)
+      .limit(1)
       .maybeSingle()
 
     if (error) throw new Error(`Failed to fetch published translation: ${error.message}`)
@@ -352,6 +355,48 @@ export class DbService {
 
     if (error) throw new Error(`Failed to update translation status for ${id}: ${error.message}`)
     return data
+  }
+
+  // --- IMAGE TRANSLATION ---
+
+  static async getImageTranslationCache(imageHash: string, targetLocale: string) {
+    const { data, error } = await this.client
+      .from('image_translation_cache')
+      .select('*')
+      .eq('image_hash', imageHash)
+      .eq('target_locale', targetLocale)
+      .single()
+
+    if (error && error.code !== 'PGRST116') {
+      throw new Error(`Failed to fetch image translation cache: ${error.message}`)
+    }
+    return data
+  }
+
+  static async saveImageTranslationCache(payload: TablesInsert<'image_translation_cache'>) {
+    const { data, error } = await this.client
+      .from('image_translation_cache')
+      .upsert(payload, { onConflict: 'image_hash,target_locale' })
+      .select()
+      .single()
+
+    if (error) throw new Error(`Failed to save image translation cache: ${error.message}`)
+    return data
+  }
+
+  /**
+   * Upload a rendered translated image to the public images bucket.
+   * Returns the public URL for embedding in translated content.
+   */
+  static async uploadTranslatedImage(path: string, png: Buffer): Promise<string> {
+    const { error } = await this.client.storage
+      .from('images')
+      .upload(path, png, { contentType: 'image/png', upsert: true })
+
+    if (error) throw new Error(`Failed to upload translated image: ${error.message}`)
+
+    const { data } = this.client.storage.from('images').getPublicUrl(path)
+    return data.publicUrl
   }
 
   // --- LOGGING & METRICS ---

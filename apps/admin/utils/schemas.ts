@@ -39,6 +39,7 @@ export const ArticleCreateSchema = z.object({
   meta_title: optionalSeoText(255),
   meta_description: optionalSeoText(500),
   og_image_url: optionalSeoUrl,
+  article_css: z.string().nullable().optional(),
   status: z.enum(ARTICLE_STATUSES).optional().default('draft'),
   priority: z.enum(['high', 'normal', 'low']).optional(),
 })

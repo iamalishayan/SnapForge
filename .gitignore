@@ -46,6 +46,7 @@ testTemplates/
 .stitch/
 .agents/
 implementation_plan.md
+image_translation_analysis.md
 
 ### IDEs and Editors
 .cursor/

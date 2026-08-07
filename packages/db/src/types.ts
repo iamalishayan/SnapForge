@@ -69,6 +69,7 @@ export type Database = {
       }
       articles: {
         Row: {
+          article_css: string | null
           content: string
           created_at: string | null
           deleted_at: string | null
@@ -88,6 +89,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          article_css?: string | null
           content: string
           created_at?: string | null
           deleted_at?: string | null
@@ -107,6 +109,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          article_css?: string | null
           content?: string
           created_at?: string | null
           deleted_at?: string | null
@@ -172,6 +175,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      image_translation_cache: {
+        Row: {
+          classification: Json | null
+          created_at: string | null
+          id: string
+          image_hash: string
+          rendered_url: string | null
+          target_locale: string
+          translated_slots: Json | null
+        }
+        Insert: {
+          classification?: Json | null
+          created_at?: string | null
+          id?: string
+          image_hash: string
+          rendered_url?: string | null
+          target_locale: string
+          translated_slots?: Json | null
+        }
+        Update: {
+          classification?: Json | null
+          created_at?: string | null
+          id?: string
+          image_hash?: string
+          rendered_url?: string | null
+          target_locale?: string
+          translated_slots?: Json | null
+        }
+        Relationships: []
       }
       indexing_stats: {
         Row: {
@@ -447,6 +480,8 @@ export type Database = {
           created_at: string | null
           deleted_at: string | null
           id: string
+          image_texts: Json | null
+          image_translation_needed: boolean | null
           inner_links: Json | null
           language_code: string
           model_used: string | null
@@ -474,6 +509,8 @@ export type Database = {
           created_at?: string | null
           deleted_at?: string | null
           id?: string
+          image_texts?: Json | null
+          image_translation_needed?: boolean | null
           inner_links?: Json | null
           language_code: string
           model_used?: string | null
@@ -501,6 +538,8 @@ export type Database = {
           created_at?: string | null
           deleted_at?: string | null
           id?: string
+          image_texts?: Json | null
+          image_translation_needed?: boolean | null
           inner_links?: Json | null
           language_code?: string
           model_used?: string | null

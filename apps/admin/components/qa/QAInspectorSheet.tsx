@@ -14,6 +14,7 @@ import {
 import { useArticle, useTranslation } from "@/lib/hooks/use-data";
 import { fetchApi } from "@/lib/api";
 import QAIssuesBanner from "./QAIssuesBanner";
+import ImageTranslationPanel from "./ImageTranslationPanel";
 import SideBySidePreview, { type TranslationEditState } from "./SideBySidePreview";
 import QAActionPanel from "./QAActionPanel";
 import type { QAQueueRow } from "./QATable";
@@ -183,10 +184,15 @@ export default function QAInspectorSheet({ row, open, onOpenChange }: QAInspecto
                 errors={translation.qa_auto_errors}
                 warnings={translation.qa_auto_warnings}
               />
+              <ImageTranslationPanel
+                imageTranslationNeeded={translation.image_translation_needed}
+                imageTexts={translation.image_texts}
+              />
               <div className="flex min-h-[60vh] flex-col">
                 <SideBySidePreview
                   sourceTitle={article?.title || row?.articles?.title || "Source article"}
                   sourceContent={article?.content || ""}
+                  articleCss={article?.article_css}
                   edit={edit}
                   onChange={setEdit}
                 />

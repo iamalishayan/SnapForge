@@ -12,8 +12,8 @@
  */
 
 import 'dotenv/config'
-import { translationWorker, revalidationWorker } from './workers'
-import { translationQueue, revalidationQueue, deadLetterQueue } from './index'
+import { translationWorker, revalidationWorker, imageTranslationWorker } from './workers'
+import { translationQueue, revalidationQueue, deadLetterQueue, imageTranslationQueue } from './index'
 import { connection } from './connection'
 import { logger } from '@snapforge/shared'
 import express from 'express'
@@ -37,6 +37,7 @@ if (isDev) {
 
 logger.info({ queue: 'translation-jobs' }, 'Worker registered')
 logger.info({ queue: 'revalidation-jobs' }, 'Worker registered')
+logger.info({ queue: 'image-translation-jobs' }, 'Worker registered')
 logger.info('Listening for jobs...')
 
 // Setup Bull Board Express Server
@@ -47,6 +48,7 @@ createBullBoard({
   queues: [
     new BullMQAdapter(translationQueue),
     new BullMQAdapter(revalidationQueue),
+    new BullMQAdapter(imageTranslationQueue),
     new BullMQAdapter(deadLetterQueue)
   ],
   serverAdapter,
@@ -105,6 +107,7 @@ const shutdown = async (signal: string) => {
   await Promise.all([
     translationWorker.close(),
     revalidationWorker.close(),
+    imageTranslationWorker.close(),
     connection.quit()
   ])
 

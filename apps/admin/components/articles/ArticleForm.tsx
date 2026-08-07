@@ -24,6 +24,7 @@ interface ArticleFormProps {
     meta_title?: string | null;
     meta_description?: string | null;
     og_image_url?: string | null;
+    article_css?: string | null;
   };
 }
 
@@ -42,6 +43,8 @@ export default function ArticleForm({ mode, articleId, initialData }: ArticleFor
   const [metaTitle, setMetaTitle] = useState(initialData?.meta_title || "");
   const [metaDescription, setMetaDescription] = useState(initialData?.meta_description || "");
   const [ogImageUrl, setOgImageUrl] = useState(initialData?.og_image_url || "");
+  const [articleCss, setArticleCss] = useState(initialData?.article_css || "");
+  const [isCodeMode, setIsCodeMode] = useState(false);
   const { data: templatesData, isError: templatesError } = useTemplates();
   const templates = templatesData?.data || [];
   const [loading, setLoading] = useState(false);
@@ -59,8 +62,43 @@ export default function ArticleForm({ mode, articleId, initialData }: ArticleFor
       const htmlString = event.target?.result as string;
       const parser = new DOMParser();
       const doc = parser.parseFromString(htmlString, "text/html");
+
+      // Extract Core Content
       setTitle(doc.querySelector("title")?.textContent || doc.querySelector("h1")?.textContent || "");
-      setContent(doc.querySelector("body")?.innerHTML || "");
+      setContent(doc.querySelector("body")?.innerHTML || htmlString);
+      setIsCodeMode(true); // Automatically switch to code mode to preserve structure
+
+      // Extract SEO Meta
+      setMetaTitle(
+        doc.querySelector('title')?.textContent ||
+        doc.querySelector('meta[name="title"]')?.getAttribute("content") ||
+        doc.querySelector('meta[property="og:title"]')?.getAttribute("content") ||
+        ""
+      );
+      setMetaDescription(
+        doc.querySelector('meta[name="description"]')?.getAttribute("content") ||
+        doc.querySelector('meta[property="og:description"]')?.getAttribute("content") ||
+        ""
+      );
+      setOgImageUrl(
+        doc.querySelector('meta[property="og:image"]')?.getAttribute("content") || ""
+      );
+
+      // Extract CSS + Google Fonts; .reveal override applied server-side on save
+      const styles = Array.from(doc.querySelectorAll('style'))
+        .map((s) => s.textContent?.trim())
+        .filter(Boolean) as string[];
+      const fontImports = Array.from(
+        doc.querySelectorAll('link[rel="stylesheet"]')
+      )
+        .map((link) => link.getAttribute('href') || '')
+        .filter((href) => /fonts\.googleapis\.com|fonts\.gstatic\.com/i.test(href))
+        .map((href) => `@import url('${href}');`);
+      const cssParts = [...fontImports, ...styles];
+      if (cssParts.length > 0) {
+        setArticleCss(cssParts.join('\n'));
+      }
+
       toast.success("HTML imported successfully!");
       if (fileInputRef.current) fileInputRef.current.value = "";
     };
@@ -77,6 +115,7 @@ export default function ArticleForm({ mode, articleId, initialData }: ArticleFor
     meta_title: metaTitle,
     meta_description: metaDescription,
     og_image_url: ogImageUrl,
+    article_css: articleCss || null,
   });
 
   const validateForm = () => {
@@ -211,8 +250,28 @@ export default function ArticleForm({ mode, articleId, initialData }: ArticleFor
                   </p>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">Main Body</label>
-                  <TipTapEditor content={content} onChange={setContent} />
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-widest">Main Body</label>
+                    <button 
+                      type="button"
+                      onClick={() => setIsCodeMode(!isCodeMode)}
+                      className="text-xs text-primary hover:underline font-mono"
+                    >
+                      {isCodeMode ? "Switch to Visual Editor" : "Switch to Code Editor"}
+                    </button>
+                  </div>
+                  {isCodeMode ? (
+                    <textarea
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      className="w-full h-[600px] bg-slate-950 text-slate-50 font-mono text-sm p-4 rounded-md focus:outline-none focus:ring-1 focus:ring-primary shadow-inner resize-y"
+                      placeholder="Enter raw HTML here..."
+                    />
+                  ) : (
+                    <div className="border rounded-md shadow-sm bg-background">
+                      <TipTapEditor content={content} onChange={setContent} />
+                    </div>
+                  )}
                 </div>
               </div>
             </section>

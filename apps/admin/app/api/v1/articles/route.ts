@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { DbService } from '@snapforge/db'
 import { ArticleCreateSchema } from '../../../../utils/schemas'
-import { parseHtmlArticle, prepareArticleContent } from './utils'
+import { normalizeArticleCss, parseHtmlArticle, prepareArticleContent } from './utils'
 import { validateArticleTemplateId } from './validate-template'
 import { resolveArticleSlug } from './resolve-slug'
 import { handleRouteError } from '../../../../utils/error'
@@ -55,7 +55,11 @@ export async function POST(request: Request) {
             : { content: body.content, inner_links: [], outer_links: [] }
 
         const { inner_links, outer_links, content, ...rest } = body
-        articleData = { ...rest, ...prepared }
+        articleData = {
+          ...rest,
+          ...prepared,
+          article_css: normalizeArticleCss(body.article_css),
+        }
       }
     }
 
@@ -83,6 +87,7 @@ export async function POST(request: Request) {
       meta_title: validData.meta_title ?? null,
       meta_description: validData.meta_description ?? null,
       og_image_url: validData.og_image_url ?? null,
+      article_css: normalizeArticleCss(articleData.article_css) ?? null,
       inner_links: articleData.inner_links ?? [],
       outer_links: articleData.outer_links ?? [],
       template_id: validData.template_id,

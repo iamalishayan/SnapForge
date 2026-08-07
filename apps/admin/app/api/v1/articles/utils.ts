@@ -4,10 +4,14 @@ import { emptyToNull } from '../../../../utils/normalize-seo'
 
 /** Shared XSS blocklist used by Mode A parse + Mode B/PATCH sanitize. */
 const SANITIZE_OPTIONS = {
-  allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'video', 'audio', 'source', 'iframe']),
+  allowedTags: sanitizeHtml.defaults.allowedTags.concat([
+    'img', 'video', 'audio', 'source', 'iframe', 'button',
+    'nav', 'header', 'footer', 'section', 'article', 'main', 'aside', 'figure', 'figcaption',
+  ]),
   allowedAttributes: {
     ...sanitizeHtml.defaults.allowedAttributes,
     '*': ['class', 'id', 'style', 'data-*'],
+    button: ['type', 'aria-label', 'disabled'],
     iframe: ['src', 'width', 'height', 'frameborder', 'allow', 'allowfullscreen'],
     video: ['src', 'controls', 'width', 'height', 'autoplay', 'loop', 'muted', 'poster'],
     audio: ['src', 'controls', 'autoplay', 'loop', 'muted'],
@@ -17,6 +21,11 @@ const SANITIZE_OPTIONS = {
   allowProtocolRelative: false,
 }
 
+const REVEAL_OVERRIDE = `
+/* SnapForge: scripts stripped — show reveal sections without IntersectionObserver */
+.reveal{opacity:1!important;transform:none!important}
+`.trim()
+
 /** Decode HTML entities when TipTap stored raw markup as escaped text. */
 function decodeHtmlEntities(text: string): string {
   return text
@@ -25,6 +34,74 @@ function decodeHtmlEntities(text: string): string {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+}
+
+/**
+ * Collect Google Fonts stylesheet URLs from <link> tags as @import rules.
+ */
+export function extractFontImportsFromHtml(html: string): string[] {
+  const $ = cheerio.load(html || '')
+  const imports: string[] = []
+
+  $('link[rel="stylesheet"]').each((_, el) => {
+    const href = $(el).attr('href')?.trim()
+    if (!href) return
+    if (!/fonts\.googleapis\.com|fonts\.gstatic\.com/i.test(href)) return
+    imports.push(`@import url('${href}');`)
+  })
+
+  return imports
+}
+
+/**
+ * Normalize stored article CSS: font imports + .reveal visibility when scripts are gone.
+ */
+export function normalizeArticleCss(
+  css: string | null | undefined,
+  options?: { fontImports?: string[] }
+): string | null {
+  const chunks: string[] = []
+  const fontImports = options?.fontImports || []
+
+  for (const rule of fontImports) {
+    if (rule && !(css || '').includes(rule)) {
+      chunks.push(rule)
+    }
+  }
+
+  if (css?.trim()) {
+    chunks.push(css.trim())
+  }
+
+  if (chunks.length === 0) {
+    return null
+  }
+
+  let combined = chunks.join('\n')
+
+  // Scripts are always stripped at ingest — keep .reveal sections visible
+  if (/\.reveal\b/.test(combined) && !combined.includes('SnapForge: scripts stripped')) {
+    combined = `${combined}\n${REVEAL_OVERRIDE}`
+  }
+
+  return combined
+}
+
+/**
+ * Extract <style> bodies + font links from a full HTML document into article_css.
+ */
+export function extractArticleCssFromHtml(html: string): string | null {
+  const $ = cheerio.load(html || '')
+  const cssChunks: string[] = []
+
+  $('style').each((_, el) => {
+    const text = $(el).html()?.trim()
+    if (text) cssChunks.push(text)
+  })
+
+  return normalizeArticleCss(cssChunks.length > 0 ? cssChunks.join('\n') : null, {
+    fontImports: extractFontImportsFromHtml(html),
+  })
 }
 
 /**
@@ -102,32 +179,55 @@ export function prepareArticleContent(content: string) {
 }
 
 /**
+ * True when the document has landing-page chrome outside <article>/<main>
+ * (nav, footer, ambient layers) — keep the full body so Mode A matches Import.
+ */
+function hasLandingChrome($: ReturnType<typeof cheerio.load>): boolean {
+  const body = $('body')
+  if (body.length === 0) return false
+
+  const hasNavOrFooter =
+    body.children('nav').length > 0 ||
+    body.children('footer').length > 0 ||
+    body.find('> nav, > footer').length > 0
+
+  const hasAmbient =
+    body.children('.ambient, .grain').length > 0 ||
+    body.find('> .ambient, > .grain').length > 0
+
+  return hasNavOrFooter || hasAmbient
+}
+
+/**
  * Parses a raw HTML string into structured fields for the database.
  *
  * Pipeline:
- * 1. DOM Parsing & Element Stripping (Removes scripts, styles, iframes, inline styles)
- * 2. Isolate Content Container (Focuses on <article> or <main> if available)
- * 3. Extraction Engine (Metadata, Title, Body, Links)
- * 4. Fallbacks (Extracts description from first paragraph if missing)
+ * 1. CSS Extraction — Capture <style> + Google Fonts, apply .reveal override
+ * 2. Strip scripts/styles/iframes/forms
+ * 3. Keep full body when landing chrome exists; else isolate article/main
+ * 4. Extract metadata, title, body, links
  */
 export function parseHtmlArticle(html: string) {
   const $ = cheerio.load(html)
 
-  // Step 1: Strip Dangerous / Irrelevant Tags
-  $('script, style, iframe, nav, header, footer, form').remove()
-  $('*').removeAttr('style') // Strip all inline styles for clean semantic HTML
+  const article_css = extractArticleCssFromHtml(html)
 
-  // Step 2: Isolate Content Container
-  let contentContainer = $('article')
-  if (contentContainer.length === 0) contentContainer = $('main')
-  if (contentContainer.length === 0) contentContainer = $('body')
+  // Strip Dangerous / Irrelevant Tags (CSS already extracted)
+  $('script, style, iframe, form').remove()
 
-  // Step 3: Extractor Engine
+  const useFullBody = hasLandingChrome($)
 
-  // Title (h1)
-  const title = contentContainer.find('h1').first().text().trim() || 'Untitled Article'
+  let contentContainer = useFullBody ? $('body') : $('article')
+  if (!useFullBody) {
+    if (contentContainer.length === 0) contentContainer = $('main')
+    if (contentContainer.length === 0) contentContainer = $('body')
+  }
 
-  // Metadata
+  const title =
+    (useFullBody
+      ? $('article h1').first().text().trim() || $('h1').first().text().trim()
+      : contentContainer.find('h1').first().text().trim()) || 'Untitled Article'
+
   let meta_title =
     $('title').text().trim() ||
     $('meta[name="title"]').attr('content')?.trim() ||
@@ -141,7 +241,6 @@ export function parseHtmlArticle(html: string) {
     $('meta[property="og:image"]').attr('content')?.trim() ||
     contentContainer.find('img').first().attr('src')?.trim()
 
-  // Step 4: Fallbacks
   if (!meta_description) {
     const firstParagraph = contentContainer.find('p').first().text().trim()
     if (firstParagraph) {
@@ -159,6 +258,7 @@ export function parseHtmlArticle(html: string) {
     meta_title: emptyToNull(meta_title) ?? title,
     meta_description: emptyToNull(meta_description),
     og_image_url: emptyToNull(og_image_url),
+    article_css,
     inner_links,
     outer_links,
     status: 'draft',

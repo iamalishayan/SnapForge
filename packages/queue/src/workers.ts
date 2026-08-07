@@ -1,9 +1,24 @@
-import { Worker } from 'bullmq'
+import { Worker, Queue } from 'bullmq'
 import { connection } from './connection'
 import { DbService } from '@snapforge/db'
-import { translateArticle, runAutoQAChecks, suggestArticleKeywords } from '@snapforge/ai'
+import {
+  translateArticle,
+  runAutoQAChecks,
+  suggestArticleKeywords,
+  extractImageUrlsFromHtml,
+} from '@snapforge/ai'
+import { processImageTranslation } from './image-translation-processor'
 import { logger, withTimeout } from '@snapforge/shared'
-import type { TranslationJobPayload, RevalidationJobPayload } from './types'
+import type {
+  TranslationJobPayload,
+  RevalidationJobPayload,
+  ImageTranslationJobPayload,
+} from './types'
+
+const imageTranslationQueue = new Queue<ImageTranslationJobPayload>(
+  'image-translation-jobs',
+  { connection: connection as any }
+)
 
 /**
  * Translation Worker
@@ -104,6 +119,32 @@ export const translationWorker = new Worker<TranslationJobPayload>(
       estimated_cost_usd: (translation.input_tokens * 0.000075) + (translation.output_tokens * 0.0003) // Gemini price estimator
     })
 
+    // 6. Enqueue image localization (non-blocking for text pipeline)
+    const imageUrls = extractImageUrlsFromHtml(translation.translated_content || article.content || '')
+    if (imageUrls.length > 0) {
+      try {
+        const jobId = `img___${result.id}`
+        await imageTranslationQueue.add(
+          'localize-images',
+          { translationId: result.id, requestId },
+          { jobId, removeOnComplete: true, removeOnFail: false }
+        )
+        logger.info(
+          { jobId, requestId, translationId: result.id, imageCount: imageUrls.length },
+          'Queued image localization'
+        )
+      } catch (enqueueErr) {
+        logger.warn(
+          {
+            requestId,
+            translationId: result.id,
+            err: enqueueErr instanceof Error ? enqueueErr.message : enqueueErr,
+          },
+          'Failed to enqueue image localization; text translation succeeded'
+        )
+      }
+    }
+
     logger.info({ jobId: job.id, requestId, qaPassed: qaResult.passed }, 'Finished translation job')
   },
   {
@@ -113,6 +154,42 @@ export const translationWorker = new Worker<TranslationJobPayload>(
       max: 12,
       duration: 60000 // Rate limit: Max 12 jobs executed per minute
     }
+  }
+)
+
+/**
+ * Image Translation Worker
+ * VLM classify → translate slots → SVG template render → storage upload → src rewrite.
+ * Logos/photos are kept; unmatched or low-confidence images are flagged for QA.
+ */
+export const imageTranslationWorker = new Worker<ImageTranslationJobPayload>(
+  'image-translation-jobs',
+  async (job) => {
+    const { translationId, requestId } = job.data
+
+    logger.info({ jobId: job.id, requestId, translationId }, 'Processing image localization')
+
+    const { entries, needsReview } = await processImageTranslation(translationId, requestId)
+
+    logger.info(
+      {
+        jobId: job.id,
+        requestId,
+        translationId,
+        imageCount: entries.length,
+        rendered: entries.filter((e) => e.status === 'rendered').length,
+        needsReview,
+      },
+      'Finished image localization'
+    )
+  },
+  {
+    connection: connection as any,
+    concurrency: 2,
+    limiter: {
+      max: 6,
+      duration: 60000,
+    },
   }
 )
 
@@ -180,10 +257,40 @@ export const revalidationWorker = new Worker<RevalidationJobPayload>(
   }
 )
 
-import { Queue } from 'bullmq'
-
 const dlq = new Queue<any, any, string>('dead-letter-jobs', {
   connection: connection as any
+})
+
+imageTranslationWorker.on('failed', async (job, err) => {
+  if (!job) {
+    return
+  }
+
+  logger.error(
+    { jobId: job.id, requestId: job.data.requestId, err: err.message },
+    'Image text detection job failed'
+  )
+
+  try {
+    await DbService.updateTranslation(job.data.translationId, {
+      image_translation_needed: true,
+    })
+  } catch (updateErr) {
+    logger.error(
+      {
+        translationId: job.data.translationId,
+        err: updateErr instanceof Error ? updateErr.message : updateErr,
+      },
+      'Failed to flag translation after image detection failure'
+    )
+  }
+
+  if (job.attemptsMade >= (job.opts.attempts || 2)) {
+    await dlq.add('failed-image-translation', {
+      originalPayload: job.data,
+      error: err.message,
+    })
+  }
 })
 
 translationWorker.on('failed', async (job, err) => {

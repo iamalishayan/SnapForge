@@ -4,6 +4,7 @@ import {
   getStructureMismatchErrors,
   validateArticleForTranslation,
   formatFingerprintForPrompt,
+  splitHtmlIntoChunks,
 } from '../src/structure-fingerprint'
 
 describe('getStructureFingerprint', () => {
@@ -51,5 +52,27 @@ describe('formatFingerprintForPrompt', () => {
     const line = formatFingerprintForPrompt(getStructureFingerprint('<p>Hi</p>'))
     expect(line).toContain('h1=0')
     expect(line).toContain('p=1')
+    expect(line).toContain('section=0')
+    expect(line).toContain('class/id/style')
+  })
+})
+
+describe('splitHtmlIntoChunks', () => {
+  it('splits top-level siblings', () => {
+    const html = '<nav>Nav</nav><footer>Foot</footer>'
+    const chunks = splitHtmlIntoChunks(html)
+    expect(chunks.length).toBe(2)
+    expect(chunks[0].html).toContain('nav')
+    expect(chunks[1].html).toContain('footer')
+  })
+
+  it('unwraps large article into section children', () => {
+    const section = (n: number) =>
+      `<section id="s${n}"><h2>Title ${n}</h2><p>${'word '.repeat(200)}</p></section>`
+    const html = `<nav>N</nav><article>${section(1)}${section(2)}${section(3)}</article><footer>F</footer>`
+    const chunks = splitHtmlIntoChunks(html)
+    expect(chunks.some((c) => c.html.startsWith('<article'))).toBe(true)
+    expect(chunks.some((c) => c.html.includes('</article>'))).toBe(true)
+    expect(chunks.filter((c) => c.html.includes('<section')).length).toBeGreaterThanOrEqual(3)
   })
 })
