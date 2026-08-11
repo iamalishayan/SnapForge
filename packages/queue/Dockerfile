@@ -41,6 +41,8 @@ COPY --from=builder --chown=nodejs:nodejs /app/pnpm-workspace.yaml ./
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/packages ./packages
 
+RUN chown nodejs:nodejs /app
+
 USER nodejs
 
 # Healthcheck to verify the container is alive
@@ -49,5 +51,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
 
 WORKDIR /app/packages/queue
 
-# Run the worker process using tsx (already available via pnpm)
-CMD ["pnpm", "exec", "tsx", "src/start-worker.ts"]
+# Run the worker process using tsx directly to avoid pnpm runtime installs
+CMD ["../../node_modules/.bin/tsx", "src/start-worker.ts"]
