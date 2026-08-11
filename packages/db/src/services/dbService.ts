@@ -280,7 +280,9 @@ export class DbService {
   static async getPublishedTranslation(domain: string, templateSlug: string, articleSlug: string) {
     const { data, error } = await this.client
       .from('translations')
-      .select('*, site_configs!inner(domain), articles!inner(slug, article_css, templates!inner(slug))')
+      .select(
+        '*, site_configs!inner(domain), articles!inner(slug, templates!inner(slug))'
+      )
       .eq('site_configs.domain', domain)
       .eq('articles.templates.slug', templateSlug)
       .eq('articles.slug', articleSlug)
@@ -291,6 +293,23 @@ export class DbService {
       .maybeSingle()
 
     if (error) throw new Error(`Failed to fetch published translation: ${error.message}`)
+
+    // article_css may be absent on older cloud schemas; load separately when available.
+    if (data?.articles && typeof data.articles === 'object') {
+      const articleId = (data as { article_id?: string }).article_id
+      if (articleId) {
+        const { data: cssRow, error: cssErr } = await this.client
+          .from('articles')
+          .select('article_css')
+          .eq('id', articleId)
+          .maybeSingle()
+        if (!cssErr && cssRow && 'article_css' in cssRow) {
+          ;(data.articles as { article_css?: string | null }).article_css =
+            cssRow.article_css
+        }
+      }
+    }
+
     return data
   }
 

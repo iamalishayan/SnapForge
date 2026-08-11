@@ -9,10 +9,16 @@
     "build": "pnpm --filter './apps/*' build",
     "lint": "pnpm --filter './apps/*' lint",
     "test": "vitest run",
-    "type-check": "for dir in apps/* packages/*; do if [ -f \"$dir/tsconfig.json\" ]; then (cd \"$dir\" && npx tsc --noEmit); fi; done"
+    "type-check": "for dir in apps/* packages/*; do if [ -f \"$dir/tsconfig.json\" ]; then (cd \"$dir\" && npx tsc --noEmit); fi; done",
+    "deploy:cloud-storage": "pnpm exec tsx scripts/setup-cloud-storage-and-admin.ts",
+    "deploy:verify-cloud": "pnpm exec tsx scripts/verify-cloud-schema.ts",
+    "deploy:site-domain": "pnpm exec tsx scripts/upsert-production-site-domain.ts",
+    "deploy:sync-vercel-env": "pnpm exec tsx scripts/sync-vercel-env.ts",
+    "deploy:free-tier": "bash scripts/deploy-free-tier.sh"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
+    "@railway/cli": "^5.35.0",
     "dotenv": "^17.4.2",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.35",
