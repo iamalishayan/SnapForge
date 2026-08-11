@@ -31,6 +31,6 @@ echo "==> 4) Deploy sites (apps/sites)"
 )
 
 echo "==> Done. Next:"
-echo "  - Deploy worker: Import GitHub repo in Koyeb (koyeb.yaml will automatically configure it)"
+echo "  - Deploy worker: Import GitHub repo as a Blueprint in Render (render.yaml)"
 echo "  - DEPLOY_SITE_DOMAIN=<sites-hostname> pnpm exec tsx scripts/upsert-production-site-domain.ts"
 echo "  - Smoke test: login admin → translate → view sites URL"

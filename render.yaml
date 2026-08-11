@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: snapforge-worker
+    env: docker
+    dockerfilePath: packages/queue/Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: UPSTASH_REDIS_URL
+        sync: false
+      - key: ADMIN_API_KEY
+        sync: false
+      - key: GOOGLE_GENERATIVE_AI_API_KEY
+        sync: false
+      - key: REVALIDATION_SECRET
+        sync: false

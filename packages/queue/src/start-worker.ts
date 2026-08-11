@@ -72,9 +72,14 @@ app.use('/admin/queues', (req, res, next) => {
 
 app.use('/admin/queues', serverAdapter.getRouter())
 
-const boardPort = process.env.BULL_BOARD_PORT || 3005
-const boardServer = app.listen(boardPort, () => {
-  logger.info({ port: boardPort }, 'Bull Board UI running at /admin/queues')
+// Render Health Check Endpoint
+app.get('/health', (req, res) => {
+  res.status(200).send('Worker is awake and healthy')
+})
+
+const boardPort = process.env.PORT || process.env.BULL_BOARD_PORT || 3005
+const boardServer = app.listen(boardPort, '0.0.0.0', () => {
+  logger.info({ port: boardPort }, 'Worker HTTP server (Bull Board + Health) running')
 })
 
 // ─── Worker Event Listeners ───────────────────────────────────────────────────

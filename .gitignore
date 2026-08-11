@@ -48,6 +48,7 @@ testTemplates/
 implementation_plan.md
 image_translation_analysis.md
 deployment_implementation_plan.md
+render_deployment_plan.md
 
 ### IDEs and Editors
 .cursor/
