@@ -170,6 +170,8 @@ export const translationWorker = new Worker<TranslationJobPayload>(
   {
     connection: connection as any,
     concurrency: 3,
+    drainDelay: 30, // Poll Redis once every 30 seconds when idle (saves ~95% Redis requests)
+    stalledInterval: 120000, // Check for stalled jobs every 2 minutes instead of 30 seconds
     limiter: {
       max: 12,
       duration: 60000 // Rate limit: Max 12 jobs executed per minute
@@ -206,6 +208,8 @@ export const imageTranslationWorker = new Worker<ImageTranslationJobPayload>(
   {
     connection: connection as any,
     concurrency: 2,
+    drainDelay: 30,
+    stalledInterval: 120000,
     limiter: {
       max: 6,
       duration: 60000,
@@ -270,6 +274,8 @@ export const revalidationWorker = new Worker<RevalidationJobPayload>(
   {
     connection: connection as any,
     concurrency: 1,
+    drainDelay: 30,
+    stalledInterval: 120000,
     limiter: {
       max: 1,
       duration: 1000 // Rate limit: Max 1 revalidation task per second

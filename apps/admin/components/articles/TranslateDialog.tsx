@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { useSiteConfigs } from "@/lib/hooks/use-data";
 import { fetchApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Info } from "lucide-react";
 
 interface TranslateDialogProps {
   articleId: string | null;
@@ -30,8 +30,10 @@ export default function TranslateDialog({
   
   const [selectedSites, setSelectedSites] = useState<string[]>([]);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [forcePrompt, setForcePrompt] = useState(false);
 
   const handleToggleSite = (siteId: string) => {
+    setForcePrompt(false); // Reset prompt if they change selection
     setSelectedSites((prev) =>
       prev.includes(siteId)
         ? prev.filter((id) => id !== siteId)
@@ -77,10 +79,8 @@ export default function TranslateDialog({
       onSuccess();
       onClose();
     } catch (err: any) {
-      if (err.message?.includes("Pass 'force': true to overwrite")) {
-        if (window.confirm("Translations already exist for this article on selected sites. Do you want to force overwrite them?")) {
-          return handleTranslate(true);
-        }
+      if (err.message?.includes("force") && err.message?.includes("overwrite")) {
+        setForcePrompt(true);
       } else {
         toast({
           title: "Error",
@@ -154,6 +154,19 @@ export default function TranslateDialog({
           )}
         </div>
 
+        <div className="bg-[#131315] border border-[#27272a] rounded-md p-3 mb-4 text-xs text-muted-foreground flex gap-2 items-start">
+          <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+          <p>
+            Translations process in the background. You can track their status in the <strong>Monitoring</strong> tab, and review any errors in the <strong>Failed Translations</strong> section on your Dashboard.
+          </p>
+        </div>
+
+        {forcePrompt && (
+          <div className="bg-red-500/10 border border-red-500/20 rounded-md p-3 mb-4 text-sm text-red-400">
+            <strong>Warning:</strong> Translations already exist for this article on the selected sites. Do you want to force overwrite them?
+          </div>
+        )}
+
         <div className="flex justify-end gap-3 pt-4 border-t border-[#27272a]">
           <Button
             variant="outline"
@@ -163,20 +176,37 @@ export default function TranslateDialog({
           >
             Cancel
           </Button>
-          <Button
-            onClick={() => handleTranslate(false)}
-            disabled={isTranslating || selectedSites.length === 0}
-            className="bg-white text-black hover:bg-white/90 font-medium"
-          >
-            {isTranslating ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              `Translate to ${selectedSites.length} site(s)`
-            )}
-          </Button>
+          {forcePrompt ? (
+            <Button
+              onClick={() => handleTranslate(true)}
+              disabled={isTranslating}
+              className="bg-red-600 text-white hover:bg-red-700 font-medium"
+            >
+              {isTranslating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                "Force Overwrite"
+              )}
+            </Button>
+          ) : (
+            <Button
+              onClick={() => handleTranslate(false)}
+              disabled={isTranslating || selectedSites.length === 0}
+              className="bg-white text-black hover:bg-white/90 font-medium"
+            >
+              {isTranslating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                `Translate to ${selectedSites.length} site(s)`
+              )}
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

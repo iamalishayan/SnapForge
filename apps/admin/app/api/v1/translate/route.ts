@@ -74,7 +74,7 @@ export const POST = withValidation(TranslateRequestSchema, async (request, data)
         return NextResponse.json({ 
           success: false, 
           error: 'All requested sites already have a translation for this article. Pass "force": true to overwrite.' 
-        }, { status: 400 })
+        }, { status: 409 })
       }
     }
 

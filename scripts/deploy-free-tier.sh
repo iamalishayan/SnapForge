@@ -17,18 +17,24 @@ if ! command -v vercel >/dev/null 2>&1; then
 fi
 
 echo "==> 3) Deploy admin (apps/admin)"
-(
-  cd apps/admin
-  vercel pull --yes --environment=production || true
-  vercel --prod --yes
-)
+ADMIN_ORG_ID=$(node -p "require('./apps/admin/.vercel/project.json').orgId" 2>/dev/null || true)
+ADMIN_PROJ_ID=$(node -p "require('./apps/admin/.vercel/project.json').projectId" 2>/dev/null || true)
+if [ -n "$ADMIN_ORG_ID" ]; then
+  VERCEL_ORG_ID=$ADMIN_ORG_ID VERCEL_PROJECT_ID=$ADMIN_PROJ_ID vercel pull --yes --environment=production || true
+  VERCEL_ORG_ID=$ADMIN_ORG_ID VERCEL_PROJECT_ID=$ADMIN_PROJ_ID vercel --prod --yes
+else
+  echo "Error: Run 'vercel link' inside apps/admin first."
+fi
 
 echo "==> 4) Deploy sites (apps/sites)"
-(
-  cd apps/sites
-  vercel pull --yes --environment=production || true
-  vercel --prod --yes
-)
+SITES_ORG_ID=$(node -p "require('./apps/sites/.vercel/project.json').orgId" 2>/dev/null || true)
+SITES_PROJ_ID=$(node -p "require('./apps/sites/.vercel/project.json').projectId" 2>/dev/null || true)
+if [ -n "$SITES_ORG_ID" ]; then
+  VERCEL_ORG_ID=$SITES_ORG_ID VERCEL_PROJECT_ID=$SITES_PROJ_ID vercel pull --yes --environment=production || true
+  VERCEL_ORG_ID=$SITES_ORG_ID VERCEL_PROJECT_ID=$SITES_PROJ_ID vercel --prod --yes
+else
+  echo "Error: Run 'vercel link' inside apps/sites first."
+fi
 
 echo "==> Done. Next:"
 echo "  - Deploy worker: Import GitHub repo as a Blueprint in Render (render.yaml)"

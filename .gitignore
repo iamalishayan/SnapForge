@@ -1,3 +1,7 @@
+# Artifcats
+artifacts/
+
+
 ### Dependencies
 node_modules/
 .pnpm-store/

@@ -10,6 +10,7 @@ import ExtractedLinksPreview from "@/components/articles/ExtractedLinksPreview";
 import { Button } from "@/components/ui/button";
 import { useTemplates } from "@/lib/hooks/use-data";
 import { ARTICLE_STATUSES, ARTICLE_STATUS_LABELS, type ArticleStatus } from "@/lib/article-status";
+import TranslateDialog from "@/components/articles/TranslateDialog";
 
 interface ArticleFormProps {
   mode: "create" | "edit";
@@ -48,6 +49,7 @@ export default function ArticleForm({ mode, articleId, initialData }: ArticleFor
   const { data: templatesData, isError: templatesError } = useTemplates();
   const templates = templatesData?.data || [];
   const [loading, setLoading] = useState(false);
+  const [translateArticleId, setTranslateArticleId] = useState<string | null>(null);
 
   useEffect(() => {
     if (templatesError) toast.error("Failed to load templates");
@@ -170,15 +172,10 @@ export default function ArticleForm({ mode, articleId, initialData }: ArticleFor
     setLoading(true);
     try {
       const id = await persistArticle("ready");
-      const res = await fetchApi<{ message?: string }>("/translate", {
-        method: "POST",
-        body: JSON.stringify({ articleId: id }),
-      });
       setStatus("ready");
-      toast.success(res.message || "Translation jobs queued.");
-      router.push("/admin/articles");
+      setTranslateArticleId(id);
     } catch (err: any) {
-      toast.error(err.message || "Failed to queue translation");
+      toast.error(err.message || "Failed to prepare article for translation");
     } finally {
       setLoading(false);
     }
@@ -189,6 +186,16 @@ export default function ArticleForm({ mode, articleId, initialData }: ArticleFor
 
   return (
     <div className="min-h-[calc(100vh-64px)] flex flex-col bg-background">
+      {translateArticleId && (
+        <TranslateDialog
+          articleId={translateArticleId}
+          onClose={() => setTranslateArticleId(null)}
+          onSuccess={() => {
+            setTranslateArticleId(null);
+            router.push("/admin/articles");
+          }}
+        />
+      )}
       <header className="sticky top-0 right-0 left-0 h-16 bg-background/80 backdrop-blur-md border-b flex items-center justify-between px-6 z-40 -mx-6 -mt-6 mb-6">
         <div className="flex flex-col">
           <nav className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-0.5">
