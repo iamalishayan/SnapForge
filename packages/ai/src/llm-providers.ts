@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
 import { withTimeout } from '@snapforge/shared'
 
-const GEMINI_MODEL = 'gemini-3.6-flash'
+const GEMINI_MODEL = 'gemini-3.1-flash-lite'
 const DEFAULT_GROQ_MODEL = 'llama-3.3-70b-versatile'
 const DEFAULT_GROK_MODEL = 'grok-3-mini'
 const MAX_OUTPUT_TOKENS = 65_536

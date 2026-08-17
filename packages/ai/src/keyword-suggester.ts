@@ -16,7 +16,7 @@ export async function suggestArticleKeywords(
 
   const genAI = new GoogleGenerativeAI(apiKey)
   const model = genAI.getGenerativeModel(
-    { model: 'gemini-3.6-flash' },
+    { model: 'gemini-3.1-flash-lite' }, 
     { apiVersion: 'v1beta' }
   )
 

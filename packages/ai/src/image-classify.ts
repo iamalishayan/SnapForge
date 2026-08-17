@@ -45,7 +45,7 @@ export interface ImageOutcomeEntry {
 /** Minimum classifier confidence required before auto-rendering a template. */
 export const MIN_RENDER_CONFIDENCE = 0.7
 
-const VISION_MODEL = 'gemini-3.6-flash'
+const VISION_MODEL = 'gemini-3.1-flash-lite'
 
 function getModel() {
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
