@@ -1,4 +1,5 @@
 import { Redis } from 'ioredis'
+import { logger } from '@snapforge/shared'
 
 const redisUrl = process.env.UPSTASH_REDIS_URL
 if (!redisUrl) {
@@ -9,5 +10,17 @@ if (!redisUrl) {
 export const connection = new Redis(redisUrl, {
   maxRetriesPerRequest: null, // Required by BullMQ worker instances
   family: 4, // Force IPv4 (fixes ENOTFOUND / ETIMEDOUT errors with Upstash on modern Node versions)
+  keepAlive: 10000, // Send TCP keep-alive pings every 10s to prevent Upstash idle ECONNRESET drops
   tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined
 })
+
+// Attach error handler to handle background socket resets smoothly without process noise/crashes
+connection.on('error', (err) => {
+  const msg = err.message || String(err)
+  if (msg.includes('ECONNRESET') || msg.includes('EPIPE') || msg.includes('ETIMEDOUT')) {
+    logger.warn('Redis socket reset detected; auto-reconnecting...')
+    return
+  }
+  logger.error({ err: msg }, 'Redis connection error')
+})
+
