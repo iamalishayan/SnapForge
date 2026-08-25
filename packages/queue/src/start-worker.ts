@@ -11,9 +11,19 @@
  *   Deploy this as a separate background worker service using `pnpm worker:start`
  */
 
+// ─── Oracle Cloud IPv6 Fix ────────────────────────────────────────────────────
+// Oracle Cloud VMs have an IPv6 interface but no outbound IPv6 route.
+// Node.js tries IPv6 first by default, causing ETIMEDOUT on every external fetch
+// (Cloudinary, Gemini API, etc). Force IPv4 first at process startup.
+import { setDefaultResultOrder } from 'dns'
+setDefaultResultOrder('ipv4first')
+// ─────────────────────────────────────────────────────────────────────────────
+
 import 'dotenv/config'
 import { translationWorker, revalidationWorker, imageTranslationWorker } from './workers'
 import { translationQueue, revalidationQueue, deadLetterQueue, imageTranslationQueue } from './index'
+import { ALL_SCHOLARSHIP_QUEUES } from './scholarship-queues'
+import { SCHOLARSHIP_QUEUE_NAMES } from './scholarship-queue-names'
 import { connection } from './connection'
 import { logger } from '@snapforge/shared'
 import express from 'express'
@@ -38,6 +48,10 @@ if (isDev) {
 logger.info({ queue: 'translation-jobs' }, 'Worker registered')
 logger.info({ queue: 'revalidation-jobs' }, 'Worker registered')
 logger.info({ queue: 'image-translation-jobs' }, 'Worker registered')
+// Log all scholarship queues (workers for Phase 2+ registered as they are implemented)
+for (const name of Object.values(SCHOLARSHIP_QUEUE_NAMES)) {
+  logger.info({ queue: name }, 'Scholarship queue registered (worker pending Phase 2+)')
+}
 logger.info('Listening for jobs...')
 
 // Setup Bull Board Express Server
@@ -46,10 +60,13 @@ serverAdapter.setBasePath('/admin/queues')
 
 createBullBoard({
   queues: [
+    // ─── Existing SnapForge queues ────────────────────────────────
     new BullMQAdapter(translationQueue),
     new BullMQAdapter(revalidationQueue),
     new BullMQAdapter(imageTranslationQueue),
-    new BullMQAdapter(deadLetterQueue)
+    new BullMQAdapter(deadLetterQueue),
+    // ─── Scholarship Pipeline queues (Phase 0.4) ──────────────────
+    ...ALL_SCHOLARSHIP_QUEUES.map((q) => new BullMQAdapter(q)),
   ],
   serverAdapter,
 })
@@ -77,7 +94,8 @@ app.get('/health', (req, res) => {
   res.status(200).send('Worker is awake and healthy')
 })
 
-const boardPort = process.env.PORT || process.env.BULL_BOARD_PORT || 3005
+const envPort = process.env.PORT || process.env.BULL_BOARD_PORT
+const boardPort = envPort ? Number(envPort) : 3005
 const boardServer = app.listen(boardPort, '0.0.0.0', () => {
   logger.info({ port: boardPort }, 'Worker HTTP server (Bull Board + Health) running')
 })
