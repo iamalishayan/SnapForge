@@ -17,12 +17,6 @@ import {
 } from '@snapforge/ai'
 import { logger } from '@snapforge/shared'
 
-interface CachedResult {
-  classification: ImageClassification
-  translated_slots: TranslatedSlot[] | null
-  rendered_url: string | null
-}
-
 /** Apply the locked routing rules to a classification. */
 function routeClassification(
   classification: ImageClassification
@@ -39,29 +33,42 @@ function routeClassification(
   return 'render'
 }
 
-function outcomeFromCache(src: string, cached: CachedResult): ImageOutcomeEntry {
-  const route = routeClassification(cached.classification)
-
-  if (route === 'render' && cached.rendered_url) {
-    return {
-      src,
-      status: 'rendered',
-      template_type: cached.classification.template_type,
-      confidence: cached.classification.confidence,
-      extracted_text: cached.classification.extracted_text,
-      slots: cached.translated_slots ?? undefined,
-      rendered_src: cached.rendered_url,
-      cached: true,
-    }
+async function renderAndUpload(
+  translationId: string,
+  imageHash: string,
+  templateType: TemplateType,
+  translatedSlots: TranslatedSlot[],
+  targetLanguage: string,
+  classification: ImageClassification,
+  src: string
+): Promise<ImageOutcomeEntry> {
+  const slotMap: Record<string, string> = {}
+  for (const slot of translatedSlots) {
+    slotMap[slot.name] = slot.translated
   }
+
+  const svg = fillTemplateSvg(templateType, slotMap, targetLanguage)
+  const png = await renderSvgToPng(svg, targetLanguage)
+  // Bust CDN/browser cache: unique path per render
+  const storagePath = `translations/${translationId}/${imageHash}-${Date.now()}.png`
+  const renderedUrl = await DbService.uploadTranslatedImage(storagePath, png)
+
+  await DbService.saveImageTranslationCache({
+    image_hash: imageHash,
+    target_locale: targetLanguage,
+    classification: classification as any,
+    translated_slots: translatedSlots as any,
+    rendered_url: renderedUrl,
+  })
 
   return {
     src,
-    status: route === 'render' ? 'needs_review' : route,
-    template_type: cached.classification.template_type,
-    confidence: cached.classification.confidence,
-    extracted_text: cached.classification.extracted_text,
-    cached: true,
+    status: 'rendered',
+    template_type: templateType,
+    confidence: classification.confidence,
+    extracted_text: classification.extracted_text,
+    slots: translatedSlots,
+    rendered_src: renderedUrl,
   }
 }
 
@@ -69,7 +76,8 @@ async function processSingleImage(
   src: string,
   translationId: string,
   targetLanguage: string,
-  countryCode: string
+  countryCode: string,
+  forceRefresh = false
 ): Promise<ImageOutcomeEntry> {
   let base64: string
   let mimeType: string
@@ -85,13 +93,47 @@ async function processSingleImage(
 
   const imageHash = hashImageBytes(base64)
 
-  const cachedRow = await DbService.getImageTranslationCache(imageHash, targetLanguage)
+  const cachedRow = forceRefresh
+    ? null
+    : await DbService.getImageTranslationCache(imageHash, targetLanguage)
+
   if (cachedRow?.classification) {
-    return outcomeFromCache(src, {
-      classification: cachedRow.classification as unknown as ImageClassification,
-      translated_slots: cachedRow.translated_slots as unknown as TranslatedSlot[] | null,
-      rendered_url: cachedRow.rendered_url,
-    })
+    const classification = cachedRow.classification as unknown as ImageClassification
+    const route = routeClassification(classification)
+
+    // Non-render routes can reuse cache as-is.
+    if (route !== 'render') {
+      return {
+        src,
+        status: route,
+        template_type: classification.template_type,
+        confidence: classification.confidence,
+        extracted_text: classification.extracted_text,
+        cached: true,
+      }
+    }
+
+    // Always re-rasterize PNG so font/config fixes apply. Reuse VLM slots.
+    const templateType = classification.template_type as TemplateType
+    let translatedSlots = cachedRow.translated_slots as unknown as TranslatedSlot[] | null
+    if (!translatedSlots?.length) {
+      translatedSlots = await translateImageSlots(
+        classification.slots,
+        targetLanguage,
+        countryCode
+      )
+    }
+
+    const entry = await renderAndUpload(
+      translationId,
+      imageHash,
+      templateType,
+      translatedSlots,
+      targetLanguage,
+      classification,
+      src
+    )
+    return { ...entry, cached: false }
   }
 
   const classification = await classifyImage(base64, mimeType)
@@ -119,33 +161,15 @@ async function processSingleImage(
     countryCode
   )
 
-  const slotMap: Record<string, string> = {}
-  for (const slot of translatedSlots) {
-    slotMap[slot.name] = slot.translated
-  }
-
-  const svg = fillTemplateSvg(templateType, slotMap, targetLanguage)
-  const png = await renderSvgToPng(svg, targetLanguage)
-  const storagePath = `translations/${translationId}/${imageHash}.png`
-  const renderedUrl = await DbService.uploadTranslatedImage(storagePath, png)
-
-  await DbService.saveImageTranslationCache({
-    image_hash: imageHash,
-    target_locale: targetLanguage,
-    classification: classification as any,
-    translated_slots: translatedSlots as any,
-    rendered_url: renderedUrl,
-  })
-
-  return {
-    src,
-    status: 'rendered',
-    template_type: templateType,
-    confidence: classification.confidence,
-    extracted_text: classification.extracted_text,
-    slots: translatedSlots,
-    rendered_src: renderedUrl,
-  }
+  return renderAndUpload(
+    translationId,
+    imageHash,
+    templateType,
+    translatedSlots,
+    targetLanguage,
+    classification,
+    src
+  )
 }
 
 /**
@@ -155,7 +179,8 @@ async function processSingleImage(
  */
 export async function processImageTranslation(
   translationId: string,
-  requestId?: string
+  requestId?: string,
+  forceRefresh = false
 ): Promise<{ entries: ImageOutcomeEntry[]; needsReview: boolean }> {
   const translation = await DbService.getTranslationById(translationId)
   if (!translation) {
@@ -166,6 +191,7 @@ export async function processImageTranslation(
   const countryCode = translation.country_code
   let content = translation.translated_content || ''
 
+  // Prefer original Cloudinary src for hashing when content already has rewritten PNGs
   const images = extractLocalizableImages(content)
   if (images.length === 0) {
     await DbService.updateTranslation(translationId, {
@@ -175,9 +201,26 @@ export async function processImageTranslation(
     return { entries: [], needsReview: false }
   }
 
+  if (forceRefresh) {
+    try {
+      await DbService.clearImageTranslationCacheForLocale(targetLanguage)
+    } catch (err) {
+      logger.warn(
+        { err: err instanceof Error ? err.message : err, targetLanguage },
+        'Failed to clear image cache before force refresh'
+      )
+    }
+  }
+
   const entries: ImageOutcomeEntry[] = []
   for (const { src, originalSrc } of images) {
-    const entry = await processSingleImage(originalSrc, translationId, targetLanguage, countryCode)
+    const entry = await processSingleImage(
+      originalSrc,
+      translationId,
+      targetLanguage,
+      countryCode,
+      forceRefresh
+    )
     entries.push(entry)
 
     if (entry.status === 'rendered' && entry.rendered_src && entry.rendered_src !== src) {

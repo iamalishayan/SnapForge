@@ -7,10 +7,9 @@ const PAPER = '#FBFAF7'
 const PANEL = '#EEF1F8'
 const GOLD = '#C9971F'
 const LINE = '#D8DCE8'
-// NotoSans is embedded at render time via font-embed.ts for Latin, Arabic, Cyrillic, etc.
-// For CJK (Chinese, Japanese, Korean), we rely on the host OS providing fonts-noto-cjk
-// because embedding a 20MB CJK font inside an SVG would crash the queue worker.
-const FONT = "'NotoSans', 'Noto Sans CJK SC', 'Noto Sans CJK JP', 'Noto Sans CJK KR', sans-serif"
+// Noto Sans family names must match fontconfig (system packages or FONTCONFIG_PATH cache).
+// sharp/librsvg ignores CSS @font-face — do not rely on embedded woff2.
+const FONT = "'Noto Sans', 'Noto Sans Arabic', 'Noto Sans Hebrew', 'Noto Sans Devanagari', 'Noto Sans Bengali', 'Noto Sans CJK SC', 'Noto Sans CJK JP', 'Noto Sans CJK KR', sans-serif"
 
 // ─── LTR coordinates (left-aligned) ──────────────────────────────────────────
 // data-ltr-x: x position when text-anchor="start"

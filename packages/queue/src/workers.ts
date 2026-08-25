@@ -144,9 +144,13 @@ export const translationWorker = new Worker<TranslationJobPayload>(
     if (imageUrls.length > 0) {
       try {
         const jobId = `img___${result.id}`
+        const existingImgJob = await imageTranslationQueue.getJob(jobId)
+        if (existingImgJob) {
+          await existingImgJob.remove()
+        }
         await imageTranslationQueue.add(
           'localize-images',
-          { translationId: result.id, requestId },
+          { translationId: result.id, requestId, forceRefresh: true },
           { jobId, removeOnComplete: true, removeOnFail: false }
         )
         logger.info(
@@ -187,11 +191,18 @@ export const translationWorker = new Worker<TranslationJobPayload>(
 export const imageTranslationWorker = new Worker<ImageTranslationJobPayload>(
   'image-translation-jobs',
   async (job) => {
-    const { translationId, requestId } = job.data
+    const { translationId, requestId, forceRefresh } = job.data
 
-    logger.info({ jobId: job.id, requestId, translationId }, 'Processing image localization')
+    logger.info(
+      { jobId: job.id, requestId, translationId, forceRefresh: !!forceRefresh },
+      'Processing image localization'
+    )
 
-    const { entries, needsReview } = await processImageTranslation(translationId, requestId)
+    const { entries, needsReview } = await processImageTranslation(
+      translationId,
+      requestId,
+      !!forceRefresh
+    )
 
     logger.info(
       {

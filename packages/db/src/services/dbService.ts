@@ -462,6 +462,29 @@ export class DbService {
     return data
   }
 
+  /** Drop cached rendered images for a locale so Retry regenerates PNGs. */
+  static async clearImageTranslationCacheForLocale(targetLocale: string) {
+    const { error } = await this.client
+      .from('image_translation_cache')
+      .delete()
+      .eq('target_locale', targetLocale)
+
+    if (error) {
+      throw new Error(`Failed to clear image translation cache: ${error.message}`)
+    }
+  }
+
+  static async clearAllImageTranslationCache() {
+    const { error } = await this.client
+      .from('image_translation_cache')
+      .delete()
+      .neq('image_hash', '')
+
+    if (error) {
+      throw new Error(`Failed to clear image translation cache: ${error.message}`)
+    }
+  }
+
   static async saveImageTranslationCache(payload: TablesInsert<'image_translation_cache'>) {
     const { data, error } = await this.client
       .from('image_translation_cache')

@@ -16,6 +16,8 @@ export interface RevalidationJobPayload {
 export interface ImageTranslationJobPayload {
   translationId: string
   requestId?: string
+  /** When true, skip stale PNG cache and re-rasterize with current fonts. */
+  forceRefresh?: boolean
 }
 
 

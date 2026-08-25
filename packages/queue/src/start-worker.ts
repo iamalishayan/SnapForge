@@ -19,6 +19,9 @@ import { setDefaultResultOrder } from 'dns'
 setDefaultResultOrder('ipv4first')
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Fontconfig MUST init before sharp/librsvg load (tofu boxes otherwise).
+import './fontconfig-bootstrap'
+
 import 'dotenv/config'
 import { translationWorker, revalidationWorker, imageTranslationWorker } from './workers'
 import { translationQueue, revalidationQueue, deadLetterQueue, imageTranslationQueue } from './index'

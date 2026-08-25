@@ -23,6 +23,14 @@ export const POST = withValidation(QARetrySchema, async (request, data) => {
       'Re-queued for translation.'
     )
 
+    // Bust image render cache for this locale — otherwise Retry returns the
+    // old broken PNG (tofu boxes) with cached:true in under a second.
+    try {
+      await DbService.clearImageTranslationCacheForLocale(translation.language_code)
+    } catch (cacheErr) {
+      console.warn('Failed to clear image translation cache on retry:', cacheErr)
+    }
+
     // Extract keywords safely for TypeScript
     const keywords = Array.isArray(translation.target_keywords) 
       ? (translation.target_keywords as string[]) 
