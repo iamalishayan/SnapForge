@@ -125,7 +125,7 @@ async function processSingleImage(
   }
 
   const svg = fillTemplateSvg(templateType, slotMap, targetLanguage)
-  const png = await renderSvgToPng(svg)
+  const png = await renderSvgToPng(svg, targetLanguage)
   const storagePath = `translations/${translationId}/${imageHash}.png`
   const renderedUrl = await DbService.uploadTranslatedImage(storagePath, png)
 
