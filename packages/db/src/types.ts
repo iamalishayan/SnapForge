@@ -581,8 +581,495 @@ export type Database = {
           },
         ]
       }
+      // ─── Scholarship Pipeline Tables (Phase 0) ──────────────────────────────
+      scholarship_records: {
+        Row: {
+          id: string
+          name: string
+          slug: string | null
+          provider: string
+          provider_type: string
+          country: string
+          target_degree: string
+          disciplines: string[]
+          nationality: string[]
+          monthly_stipend_amount: number | null
+          monthly_stipend_min_amount: number | null
+          monthly_stipend_max_amount: number | null
+          monthly_stipend_currency: string | null
+          tuition_coverage: boolean | null
+          health_insurance_covered: boolean | null
+          other_benefits: string[]
+          funding_type: string | null
+          cycle_status: string
+          active_intake_id: string | null
+          max_cycle_wait_days: number
+          awaiting_next_cycle_since: string | null
+          source_url: string
+          official_apply_url: string
+          source_tier: number
+          source_language: string
+          fetched_at: string | null
+          last_verified_at: string | null
+          clean_content_hash: string | null
+          semantic_record_hash: string | null
+          short_description: string | null
+          eligibility_summary: Json
+          required_documents: string[]
+          language_requirements: Json
+          article_id: string | null
+          article_generated: boolean
+          quarantine_reason: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          name: string
+          slug?: string | null
+          provider: string
+          provider_type: string
+          country: string
+          target_degree: string
+          disciplines?: string[]
+          nationality?: string[]
+          monthly_stipend_amount?: number | null
+          monthly_stipend_min_amount?: number | null
+          monthly_stipend_max_amount?: number | null
+          monthly_stipend_currency?: string | null
+          tuition_coverage?: boolean | null
+          health_insurance_covered?: boolean | null
+          other_benefits?: string[]
+          funding_type?: string | null
+          cycle_status?: string
+          active_intake_id?: string | null
+          max_cycle_wait_days?: number
+          awaiting_next_cycle_since?: string | null
+          source_url: string
+          official_apply_url: string
+          source_tier: number
+          source_language?: string
+          fetched_at?: string | null
+          last_verified_at?: string | null
+          clean_content_hash?: string | null
+          semantic_record_hash?: string | null
+          short_description?: string | null
+          eligibility_summary?: Json
+          required_documents?: string[]
+          language_requirements?: Json
+          article_id?: string | null
+          article_generated?: boolean
+          quarantine_reason?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          slug?: string | null
+          provider?: string
+          provider_type?: string
+          country?: string
+          target_degree?: string
+          disciplines?: string[]
+          nationality?: string[]
+          monthly_stipend_amount?: number | null
+          monthly_stipend_min_amount?: number | null
+          monthly_stipend_max_amount?: number | null
+          monthly_stipend_currency?: string | null
+          tuition_coverage?: boolean | null
+          health_insurance_covered?: boolean | null
+          other_benefits?: string[]
+          funding_type?: string | null
+          cycle_status?: string
+          active_intake_id?: string | null
+          max_cycle_wait_days?: number
+          awaiting_next_cycle_since?: string | null
+          source_url?: string
+          official_apply_url?: string
+          source_tier?: number
+          source_language?: string
+          fetched_at?: string | null
+          last_verified_at?: string | null
+          clean_content_hash?: string | null
+          semantic_record_hash?: string | null
+          short_description?: string | null
+          eligibility_summary?: Json
+          required_documents?: string[]
+          language_requirements?: Json
+          article_id?: string | null
+          article_generated?: boolean
+          quarantine_reason?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_active_intake"
+            columns: ["active_intake_id"]
+            isOneToOne: false
+            referencedRelation: "scholarship_intakes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scholarship_records_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "articles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scholarship_intakes: {
+        Row: {
+          id: string
+          scholarship_id: string
+          intake_key: string
+          semester: string
+          cycle_label: string
+          deadline: string
+          program_start_date: string | null
+          last_amended_at: string | null
+          amendment_count: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          scholarship_id: string
+          intake_key: string
+          semester: string
+          cycle_label: string
+          deadline: string
+          program_start_date?: string | null
+          last_amended_at?: string | null
+          amendment_count?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          scholarship_id?: string
+          intake_key?: string
+          semester?: string
+          cycle_label?: string
+          deadline?: string
+          program_start_date?: string | null
+          last_amended_at?: string | null
+          amendment_count?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scholarship_intakes_scholarship_id_fkey"
+            columns: ["scholarship_id"]
+            isOneToOne: false
+            referencedRelation: "scholarship_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scholarship_article_clusters: {
+        Row: {
+          id: string
+          scholarship_record_id: string
+          cluster_status: string
+          intake_key: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          scholarship_record_id: string
+          cluster_status?: string
+          intake_key: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          scholarship_record_id?: string
+          cluster_status?: string
+          intake_key?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scholarship_article_clusters_scholarship_record_id_fkey"
+            columns: ["scholarship_record_id"]
+            isOneToOne: false
+            referencedRelation: "scholarship_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scholarship_article_variants: {
+        Row: {
+          id: string
+          cluster_id: string
+          site_id: string
+          locale: string
+          canonical_url: string
+          revalidation_endpoint: string
+          isr_status: string
+          isr_retry_count: number
+          last_revalidated_at: string | null
+          assembled_html: string | null
+          seo_title: string | null
+          seo_description: string | null
+          published_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          cluster_id: string
+          site_id: string
+          locale: string
+          canonical_url: string
+          revalidation_endpoint: string
+          isr_status?: string
+          isr_retry_count?: number
+          last_revalidated_at?: string | null
+          assembled_html?: string | null
+          seo_title?: string | null
+          seo_description?: string | null
+          published_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          cluster_id?: string
+          site_id?: string
+          locale?: string
+          canonical_url?: string
+          revalidation_endpoint?: string
+          isr_status?: string
+          isr_retry_count?: number
+          last_revalidated_at?: string | null
+          assembled_html?: string | null
+          seo_title?: string | null
+          seo_description?: string | null
+          published_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scholarship_article_variants_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "scholarship_article_clusters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scholarship_article_variants_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "site_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scholarship_cluster_jobs: {
+        Row: {
+          id: string
+          cluster_id: string
+          scholarship_record_id: string
+          intake_key: string
+          target_locales: string[]
+          build_path: string
+          job_status: string
+          revalidation_results: Json
+          published_at: string | null
+          failed_reason: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          cluster_id: string
+          scholarship_record_id: string
+          intake_key: string
+          target_locales?: string[]
+          build_path: string
+          job_status?: string
+          revalidation_results?: Json
+          published_at?: string | null
+          failed_reason?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          cluster_id?: string
+          scholarship_record_id?: string
+          intake_key?: string
+          target_locales?: string[]
+          build_path?: string
+          job_status?: string
+          revalidation_results?: Json
+          published_at?: string | null
+          failed_reason?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scholarship_cluster_jobs_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "scholarship_article_clusters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scholarship_cluster_jobs_scholarship_record_id_fkey"
+            columns: ["scholarship_record_id"]
+            isOneToOne: false
+            referencedRelation: "scholarship_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scholarship_fetch_log: {
+        Row: {
+          id: string
+          scholarship_record_id: string | null
+          source_url: string
+          source_tier: number | null
+          http_status: number | null
+          engine_used: string | null
+          fetch_error: string | null
+          clean_content_hash_before: string | null
+          clean_content_hash_after: string | null
+          stage1_changed: boolean | null
+          semantic_hash_before: string | null
+          semantic_hash_after: string | null
+          stage2_changed: boolean | null
+          extraction_triggered: boolean
+          article_rebuild_triggered: boolean
+          build_path: string | null
+          fetched_at: string
+        }
+        Insert: {
+          id?: string
+          scholarship_record_id?: string | null
+          source_url: string
+          source_tier?: number | null
+          http_status?: number | null
+          engine_used?: string | null
+          fetch_error?: string | null
+          clean_content_hash_before?: string | null
+          clean_content_hash_after?: string | null
+          stage1_changed?: boolean | null
+          semantic_hash_before?: string | null
+          semantic_hash_after?: string | null
+          stage2_changed?: boolean | null
+          extraction_triggered?: boolean
+          article_rebuild_triggered?: boolean
+          build_path?: string | null
+          fetched_at?: string
+        }
+        Update: {
+          id?: string
+          scholarship_record_id?: string | null
+          source_url?: string
+          source_tier?: number | null
+          http_status?: number | null
+          engine_used?: string | null
+          fetch_error?: string | null
+          clean_content_hash_before?: string | null
+          clean_content_hash_after?: string | null
+          stage1_changed?: boolean | null
+          semantic_hash_before?: string | null
+          semantic_hash_after?: string | null
+          stage2_changed?: boolean | null
+          extraction_triggered?: boolean
+          article_rebuild_triggered?: boolean
+          build_path?: string | null
+          fetched_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scholarship_fetch_log_scholarship_record_id_fkey"
+            columns: ["scholarship_record_id"]
+            isOneToOne: false
+            referencedRelation: "scholarship_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scholarship_quarantine: {
+        Row: {
+          id: string
+          scholarship_record_id: string | null
+          source_url: string
+          source_tier: number | null
+          failure_reason: string
+          failure_details: Json
+          raw_evidence: Json
+          extracted_record: Json | null
+          review_status: string
+          reviewed_by: string | null
+          reviewer_notes: string | null
+          reviewed_at: string | null
+          requeued_job_id: string | null
+          quarantined_at: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          scholarship_record_id?: string | null
+          source_url: string
+          source_tier?: number | null
+          failure_reason: string
+          failure_details?: Json
+          raw_evidence?: Json
+          extracted_record?: Json | null
+          review_status?: string
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          reviewed_at?: string | null
+          requeued_job_id?: string | null
+          quarantined_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          scholarship_record_id?: string | null
+          source_url?: string
+          source_tier?: number | null
+          failure_reason?: string
+          failure_details?: Json
+          raw_evidence?: Json
+          extracted_record?: Json | null
+          review_status?: string
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          reviewed_at?: string | null
+          requeued_job_id?: string | null
+          quarantined_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scholarship_quarantine_scholarship_record_id_fkey"
+            columns: ["scholarship_record_id"]
+            isOneToOne: false
+            referencedRelation: "scholarship_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
+
       [_ in never]: never
     }
     Functions: {

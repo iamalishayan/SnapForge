@@ -51,5 +51,7 @@ export * from './workers'
 export * from './connection'
 export * from './image-translation-processor'
 
-
-
+// ─── Scholarship Pipeline (Phase 0.4) ────────────────────────────────────────
+export * from './scholarship-queue-names'
+export * from './scholarship-types'
+export * from './scholarship-queues'
