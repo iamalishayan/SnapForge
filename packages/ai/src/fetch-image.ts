@@ -56,6 +56,9 @@ function guessMimeType(url: string, contentType: string | null): string {
 export async function fetchImageAsBase64(
   src: string
 ): Promise<{ base64: string; mimeType: string }> {
+  // Fix Oracle Cloud IPv6 ETIMEDOUT issue
+  require('dns').setDefaultResultOrder('ipv4first')
+
   const dataUri = parseDataUri(src)
   if (dataUri) {
     return dataUri
