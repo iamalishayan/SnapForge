@@ -27,19 +27,19 @@
  */
 
 export const SCHOLARSHIP_QUEUE_NAMES = {
-  FETCH_STATIC:      'scholarship:fetch:static',
-  FETCH_BROWSER:     'scholarship:fetch:browser',
-  EXTRACT:           'scholarship:extract',
-  QA:                'scholarship:qa',
-  GENERATE:          'scholarship:generate',
-  AMENDMENT:         'scholarship:amendment',
-  FACTCHECK:         'scholarship:factcheck',
-  CLUSTER_TRANSLATE: 'scholarship:cluster:translate',
-  CLUSTER_PUBLISH:   'scholarship:cluster:publish',
-  CLUSTER_ISR_RETRY: 'scholarship:cluster:isr-retry',
-  RECHECK:           'scholarship:recheck',
-  QUARANTINE:        'scholarship:quarantine',
-  DLQ:               'scholarship:dlq',
+  FETCH_STATIC:      'scholarship-fetch-static',
+  FETCH_BROWSER:     'scholarship-fetch-browser',
+  EXTRACT:           'scholarship-extract',
+  QA:                'scholarship-qa',
+  GENERATE:          'scholarship-generate',
+  AMENDMENT:         'scholarship-amendment',
+  FACTCHECK:         'scholarship-factcheck',
+  CLUSTER_TRANSLATE: 'scholarship-cluster-translate',
+  CLUSTER_PUBLISH:   'scholarship-cluster-publish',
+  CLUSTER_ISR_RETRY: 'scholarship-cluster-isr-retry',
+  RECHECK:           'scholarship-recheck',
+  QUARANTINE:        'scholarship-quarantine',
+  DLQ:               'scholarship-dlq',
 } as const
 
 export type ScholarshipQueueName =
