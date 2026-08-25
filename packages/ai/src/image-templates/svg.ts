@@ -7,9 +7,10 @@ const PAPER = '#FBFAF7'
 const PANEL = '#EEF1F8'
 const GOLD = '#C9971F'
 const LINE = '#D8DCE8'
-// NotoSans is embedded at render time via font-embed.ts — covers ALL languages
-// including Urdu (Arabic script), Turkish, German, Japanese, etc.
-const FONT = "'NotoSans', 'Noto Sans Arabic', sans-serif"
+// NotoSans is embedded at render time via font-embed.ts for Latin, Arabic, Cyrillic, etc.
+// For CJK (Chinese, Japanese, Korean), we rely on the host OS providing fonts-noto-cjk
+// because embedding a 20MB CJK font inside an SVG would crash the queue worker.
+const FONT = "'NotoSans', 'Noto Sans CJK SC', 'Noto Sans CJK JP', 'Noto Sans CJK KR', sans-serif"
 
 // ─── LTR coordinates (left-aligned) ──────────────────────────────────────────
 // data-ltr-x: x position when text-anchor="start"

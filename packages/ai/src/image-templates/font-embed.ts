@@ -72,90 +72,97 @@ async function downloadFontAsBase64(url: string, cacheKey: string): Promise<stri
 }
 
 /**
- * Returns a CSS @font-face block with base64-embedded Noto Sans fonts
- * appropriate for the given language code.
- * 
- * Noto Sans is used because it has near-universal script coverage, meaning
- * Urdu (Arabic script), Turkish, German, Japanese etc. all render correctly.
+ * Helper to download fonts and build the CSS string.
  */
-export async function getFontFaceForLanguage(languageCode: string): Promise<string> {
-  const lang = languageCode.toLowerCase().split('-')[0]
-  const subset = LANG_SUBSET[lang] ?? 'latin'
-
-  // Noto Sans covers: Latin, Arabic (Urdu/Ar/Fa), Hebrew, Cyrillic, Devanagari,
-  // Bengali, Japanese, Korean, Chinese. This single family handles all SnapForge targets.
-  const isRtl = ['ur', 'ar', 'fa'].includes(lang)
-
-  if (isRtl) {
-    // For RTL (Urdu/Arabic/Farsi) we embed BOTH Arabic AND Latin fonts.
-    // This is needed because job postings often mix Arabic script with
-    // Latin terms like "Python", "AWS", "Django" etc.
-    const arabicUrl = 'https://fonts.gstatic.com/s/notosansarabic/v18/nwpxtLGrOAZMl5nJ_wfgRg3DrWFZWsnVBJ_sS6tlqHHFlhQ5l3sQWIHPqzCfyGydMWMtNqVeIQ.woff2'
-    const latinUrl  = 'https://fonts.gstatic.com/s/notosans/v36/o-0mIpQlx3QUlC5A4PNB6Ryti20_6n1iPHjcz6L1SoM-jCpoiyD9A-9X6VLKzA.woff2'
-    const latinBoldUrl = 'https://fonts.gstatic.com/s/notosans/v36/o-0mIpQlx3QUlC5A4PNB6Ryti20_6n1iPHjcz6L1SoM-jCpoiyD9A99a6VLKzA.woff2'
-    try {
-      const [arabicB64, latinB64, latinBoldB64] = await Promise.all([
-        downloadFontAsBase64(arabicUrl, 'noto-arabic-regular'),
-        downloadFontAsBase64(latinUrl, 'noto-latin-regular'),
-        downloadFontAsBase64(latinBoldUrl, 'noto-latin-bold'),
-      ])
-      return `
-        @font-face {
-          font-family: 'NotoSans';
-          font-style: normal;
-          font-weight: 400;
-          src: url('data:font/woff2;base64,${arabicB64}') format('woff2');
-          unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
-        }
-        @font-face {
-          font-family: 'NotoSans';
-          font-style: normal;
-          font-weight: 700;
-          src: url('data:font/woff2;base64,${arabicB64}') format('woff2');
-          unicode-range: U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC;
-        }
-        @font-face {
-          font-family: 'NotoSans';
-          font-style: normal;
-          font-weight: 400;
-          src: url('data:font/woff2;base64,${latinB64}') format('woff2');
-        }
-        @font-face {
-          font-family: 'NotoSans';
-          font-style: normal;
-          font-weight: 700;
-          src: url('data:font/woff2;base64,${latinBoldB64}') format('woff2');
-        }
-      `.trim()
-    } catch {
-      return `/* Font download failed — falling back to system fonts */`
-    }
-  }
-
-  // Noto Sans Latin (covers Turkish, German, French, Spanish, Polish, etc.)
-  const regularUrl = 'https://fonts.gstatic.com/s/notosans/v36/o-0mIpQlx3QUlC5A4PNB6Ryti20_6n1iPHjcz6L1SoM-jCpoiyD9A-9X6VLKzA.woff2'
-  const boldUrl    = 'https://fonts.gstatic.com/s/notosans/v36/o-0mIpQlx3QUlC5A4PNB6Ryti20_6n1iPHjcz6L1SoM-jCpoiyD9A99a6VLKzA.woff2'
-
+async function downloadAndBuildCss(regularUrl: string, boldUrl: string, cacheKeyPrefix: string, unicodeRange?: string): Promise<string> {
   try {
     const [regularB64, boldB64] = await Promise.all([
-      downloadFontAsBase64(regularUrl, 'noto-latin-regular'),
-      downloadFontAsBase64(boldUrl, 'noto-latin-bold'),
+      downloadFontAsBase64(regularUrl, `${cacheKeyPrefix}-regular`),
+      downloadFontAsBase64(boldUrl, `${cacheKeyPrefix}-bold`),
     ])
+    
+    const rangeRule = unicodeRange ? `\n          unicode-range: ${unicodeRange};` : ''
+    
     return `
       @font-face {
         font-family: 'NotoSans';
         font-style: normal;
         font-weight: 400;
-        src: url('data:font/woff2;base64,${regularB64}') format('woff2');
+        src: url('data:font/woff2;base64,${regularB64}') format('woff2');${rangeRule}
       }
       @font-face {
         font-family: 'NotoSans';
         font-style: normal;
         font-weight: 700;
-        src: url('data:font/woff2;base64,${boldB64}') format('woff2');
+        src: url('data:font/woff2;base64,${boldB64}') format('woff2');${rangeRule}
       }
     `.trim()
   } catch {
-    return `/* Font download failed — falling back to system fonts */`
+    return `/* Font download failed for ${cacheKeyPrefix} — falling back to system fonts */`
+  }
+}
+
+/**
+ * Returns a CSS @font-face block with base64-embedded Noto Sans fonts
+ * appropriate for the given language code.
+ * 
+ * Noto Sans is used because it has near-universal script coverage.
+ * For CJK, we skip embedding due to massive file sizes (15MB+) and rely on OS fonts.
+ */
+export async function getFontFaceForLanguage(languageCode: string): Promise<string> {
+  const lang = languageCode.toLowerCase().split('-')[0]
+  const subset = LANG_SUBSET[lang] ?? 'latin'
+
+  // If CJK, don't embed base64. Let librsvg fall back to the OS 'Noto Sans CJK' font.
+  if (['chinese-simplified', 'japanese', 'korean'].includes(subset)) {
+    return `/* CJK fonts are too large for base64 embedding. Relying on host OS fonts (e.g. fonts-noto-cjk). */`
+  }
+
+  // Base Latin URLs (always included as fallback for mixed text like "Python")
+  const latinRegularUrl = 'https://fonts.gstatic.com/s/notosans/v36/o-0mIpQlx3QUlC5A4PNB6Ryti20_6n1iPHjcz6L1SoM-jCpoiyD9A-9X6VLKzA.woff2'
+  const latinBoldUrl = 'https://fonts.gstatic.com/s/notosans/v36/o-0mIpQlx3QUlC5A4PNB6Ryti20_6n1iPHjcz6L1SoM-jCpoiyD9A99a6VLKzA.woff2'
+  const latinCss = await downloadAndBuildCss(latinRegularUrl, latinBoldUrl, 'noto-latin')
+
+  switch (subset) {
+    case 'arabic': {
+      const arabicRegularUrl = 'https://fonts.gstatic.com/s/notosansarabic/v18/nwpxtLGrOAZMl5nJ_wfgRg3DrWFZWsnVBJ_sS6tlqHHFlhQ5l3sQWIHPqzCfyGydMWMtNqVeIQ.woff2'
+      const arabicBoldUrl = arabicRegularUrl // Using same for now as previous implementation did
+      const arabicRange = 'U+0600-06FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE80-FEFC'
+      const arabicCss = await downloadAndBuildCss(arabicRegularUrl, arabicBoldUrl, 'noto-arabic', arabicRange)
+      return `${arabicCss}\n${latinCss}`
+    }
+
+    case 'hebrew': {
+      const regularUrl = 'https://fonts.gstatic.com/s/notosanshebrew/v50/or30Q7v33eiDljA1IufXTtVf7V6RvEEdhQlk0LlGxCyaePiWTNzWNf72cWk.woff2'
+      const boldUrl = 'https://fonts.gstatic.com/s/notosanshebrew/v50/or30Q7v33eiDljA1IufXTtVf7V6RvEEdhQlk0LlGxCyaePiWTNzWNf72cWk.woff2'
+      const css = await downloadAndBuildCss(regularUrl, boldUrl, 'noto-hebrew')
+      return `${css}\n${latinCss}`
+    }
+
+    case 'devanagari': {
+      const regularUrl = 'https://fonts.gstatic.com/s/notosansdevanagari/v30/TuG7UUFzXI5FBtUq5a8bjKYTZjtRU6Sgv3NaV_SNmI0b8QQCQmHN5TV_5Kl4-GIB.woff2'
+      const boldUrl = 'https://fonts.gstatic.com/s/notosansdevanagari/v30/TuG7UUFzXI5FBtUq5a8bjKYTZjtRU6Sgv3NaV_SNmI0b8QQCQmHN5TV_5Kl4-GIB.woff2'
+      const css = await downloadAndBuildCss(regularUrl, boldUrl, 'noto-devanagari')
+      return `${css}\n${latinCss}`
+    }
+
+    case 'bengali': {
+      const regularUrl = 'https://fonts.gstatic.com/s/notosansbengali/v33/Cn-fJsCGWQxOjaGwMQ6fIiMywrNJIky6nvd8BjzVMvJx2mc4I3mYrtU3_I-n.woff2'
+      const boldUrl = 'https://fonts.gstatic.com/s/notosansbengali/v33/Cn-fJsCGWQxOjaGwMQ6fIiMywrNJIky6nvd8BjzVMvJx2mc4I3mYrtU3_I-n.woff2'
+      const css = await downloadAndBuildCss(regularUrl, boldUrl, 'noto-bengali')
+      return `${css}\n${latinCss}`
+    }
+
+    case 'cyrillic': {
+      const regularUrl = 'https://fonts.gstatic.com/s/notosans/v42/o-0bIpQlx3QUlC5A4PNB6Ryti20_6n1iPHjc5ardu3mhPy1Fig.woff2'
+      const boldUrl = 'https://fonts.gstatic.com/s/notosans/v42/o-0bIpQlx3QUlC5A4PNB6Ryti20_6n1iPHjc5ardu3mhPy1Fig.woff2'
+      // No extra latin css needed since Cyrillic font file often covers basic Latin too, but we append it anyway for safety
+      const css = await downloadAndBuildCss(regularUrl, boldUrl, 'noto-cyrillic')
+      return `${css}\n${latinCss}`
+    }
+
+    case 'latin':
+    default:
+      return latinCss
   }
 }
