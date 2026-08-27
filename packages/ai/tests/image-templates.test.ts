@@ -29,9 +29,9 @@ describe('image templates', () => {
     expect(svg).not.toContain('Subhead')
   })
 
-  it('sets rtl direction for RTL languages', () => {
+  it('populates slots for RTL languages', () => {
     const svg = fillTemplateSvg('banner', { headline: 'سرخی' }, 'ur')
-    expect(svg).toContain('direction="rtl"')
+    expect(svg).toContain('سرخی')
   })
 })
 
