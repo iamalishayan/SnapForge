@@ -39,6 +39,8 @@ export default function EditArticlePage({ params }: { params: { id: string } }) 
         meta_description: article.meta_description,
         og_image_url: article.og_image_url,
         article_css: article.article_css,
+        visual_theme: article.visual_theme,
+        job_slots: article.job_slots,
       }}
     />
   );

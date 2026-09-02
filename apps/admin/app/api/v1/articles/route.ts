@@ -88,6 +88,8 @@ export async function POST(request: Request) {
       meta_description: validData.meta_description ?? null,
       og_image_url: validData.og_image_url ?? null,
       article_css: normalizeArticleCss(articleData.article_css) ?? null,
+      visual_theme: validData.visual_theme ?? null,
+      job_slots: (validData.job_slots ?? null) as any,
       inner_links: articleData.inner_links ?? [],
       outer_links: articleData.outer_links ?? [],
       template_id: validData.template_id,

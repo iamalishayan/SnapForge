@@ -3,15 +3,17 @@
   "version": "0.1.0",
   "main": "src/index.ts",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.20.0",
     "@google/generative-ai": "^0.24.1",
     "@snapforge/db": "workspace:*",
     "@snapforge/shared": "workspace:*",
     "cheerio": "^1.0.0",
-    "p-limit": "^5.0.0",
-    "sharp": "^0.35.3"
+    "fast-json-stable-stringify": "^2.1.0",
+    "sharp": "^0.35.3",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/fast-json-stable-stringify": "^2.0.4",
     "typescript": "^5.0.0"
   }
 }
+

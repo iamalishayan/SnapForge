@@ -26,6 +26,24 @@ export const TranslateRequestSchema = z.object({
   force: z.boolean().default(false)
 })
 
+const JobSlotsSchema = z
+  .object({
+    headline: z.string().optional(),
+    company: z.string().optional(),
+    location: z.string().optional(),
+    employmentType: z.string().optional(),
+    salary: z.string().optional(),
+    tags: z.string().optional(),
+    requirements: z.string().optional(),
+    benefits: z.string().optional(),
+    applyLabel: z.string().optional(),
+    applyUrl: z.string().optional(),
+    heroImageUrl: z.string().optional(),
+    summary: z.string().optional(),
+  })
+  .nullable()
+  .optional()
+
 export const ArticleCreateSchema = z.object({
   title: z.string().min(1).max(255),
   content: z.string().min(1, 'Content is required'),
@@ -40,6 +58,11 @@ export const ArticleCreateSchema = z.object({
   meta_description: optionalSeoText(500),
   og_image_url: optionalSeoUrl,
   article_css: z.string().nullable().optional(),
+  visual_theme: z
+    .enum(['job-corporate', 'job-startup'])
+    .nullable()
+    .optional(),
+  job_slots: JobSlotsSchema,
   status: z.enum(ARTICLE_STATUSES).optional().default('draft'),
   priority: z.enum(['high', 'normal', 'low']).optional(),
 })

@@ -75,6 +75,7 @@ export type Database = {
           deleted_at: string | null
           id: string
           inner_links: Json | null
+          job_slots: Json | null
           meta_description: string | null
           meta_title: string | null
           og_image_url: string | null
@@ -87,6 +88,7 @@ export type Database = {
           template_id: string
           title: string
           updated_at: string | null
+          visual_theme: string | null
         }
         Insert: {
           article_css?: string | null
@@ -95,6 +97,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           inner_links?: Json | null
+          job_slots?: Json | null
           meta_description?: string | null
           meta_title?: string | null
           og_image_url?: string | null
@@ -107,6 +110,7 @@ export type Database = {
           template_id: string
           title: string
           updated_at?: string | null
+          visual_theme?: string | null
         }
         Update: {
           article_css?: string | null
@@ -115,6 +119,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           inner_links?: Json | null
+          job_slots?: Json | null
           meta_description?: string | null
           meta_title?: string | null
           og_image_url?: string | null
@@ -127,6 +132,7 @@ export type Database = {
           template_id?: string
           title?: string
           updated_at?: string | null
+          visual_theme?: string | null
         }
         Relationships: [
           {
